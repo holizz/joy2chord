@@ -1,0 +1,153 @@
+Explination of Implementation
+
+key:	32	16	8	4	2	1
+ W : 	 0	 1	0	1	1	1
+
+Pointer Finger: 1
+Middle Finger: 2
+Ring Finger: 4
+Pinky: 8
+Thumb: 16
+Thumb: 32
+
+This Chorded Keyboard design uses basic binary principles, along with different modes to keep the number or required keys low, but possible cominations high
+
+Mode 1: Alpha
+
+Dec	Bin	     Alpha/Num
+
+1	000001		A
+2	000010		B
+3	000011		C
+4	000100		D
+5	000101		E
+6	000110		F
+7	000111		G
+8	001000		H
+9	001001		I
+10	001010		J
+11	001011		K
+12	001100		L
+13	001101		M
+14	001110		N
+15	001111		O
+16	010000		P
+17	010001		Q
+18	010010		R
+19	010011		S
+20	010100		T
+21	010101		U
+22	010110		V
+23	010111		W
+24	011000		X
+25	011001		Y
+26	011010		Z
+27	011011		
+28	011100		Meta
+29	011101		Ctrl	
+30	011110		Alt
+31	011111		Mode_1
+32	100000		enter
+33	100001		space
+34	100010		tab
+35	100011		backspace
+36	100100		shift
+37	100101		
+38	100110
+39	100111
+40	101000		escape
+41	101001		page_up
+42	101010		page_down
+43	101011		home
+44	101100		end
+45	101101		insert
+46	101110		delete
+47	101111		Mode_2
+*
+63	111111		Mode_3
+
+Mode 2: Numeric
+
+Dec	Bin	     Alpha/Num
+
+1	000001		1
+2	000010		2
+3	000011		3
+4	000100		4
+5	000101		5
+6	000110		6
+7	000111		7
+8	001000		8
+9	001001		9
+10	001010		0
+11	001011		!
+12	001100		@
+13	001101		#
+14	001110		$
+15	001111		%
+16	010000		^
+17	010001		&
+18	010010		*
+19	010011		(
+20	010100		)
+21	010101		[
+22	010110		]
+23	010111		{
+24	011000		}
+25	011001		<
+26	011010		>
+27	011011		
+28	011100		
+29	011101		
+30	011110		
+31	011111		Mode_1
+32	100000		`	
+33	100001		~
+34	100010		-
+35	100011		_
+36	100100		=
+37	100101		+
+38	100110		,
+39	100111		.
+40	101000		/
+41	101001		?
+42	101010		;
+43	101011		:
+44	101100		'
+45	101101		"
+46	101110		
+47	101111		Mode_2
+*
+63	111111		Mode_3
+
+Mode 3: Symbol
+
+Dec	Bin	     Alpha/Num
+
+1	000001		F1
+2	000010		F2
+3	000011		F3
+4	000100		F4
+5	000101		F5
+6	000110		F6
+7	000111		F7
+8	001000		F8
+9	001001		F9
+10	001010		F10
+11	001011		F11
+12	001100		F12
+*
+32	100000		sysreq	
+33	100001		break
+34	100010		pause
+35	100011		cap_lock
+36	100100		num_lock
+37	100101		scroll_lock
+*
+47	101111		Mode_2
+*
+63	111111		Mode_3
+
+I should add support for helper i/o, with voice input/output and osd prompts
+flite, swift, pocketsphinx, sdl gui, icepanel integration?
+
