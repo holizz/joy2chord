@@ -1,0 +1,7 @@
+AC_INIT(src/joy2chord.cpp)
+AM_INIT_AUTOMAKE(joy2chord, 0.1)
+AC_PROG_CXX
+AC_LANG_C
+AC_HEADER_STDC
+AM_CONFIG_HEADER(config.h)
+AC_OUTPUT(Makefile src/Makefile)
