@@ -51,6 +51,7 @@ int axes;
 int joy_fd;
 int buttons;
 int verbose = 0;
+int maxbad = 40000;
 
 typedef struct {
         int controller;
@@ -93,7 +94,7 @@ int setup_uinput_device()
         int i=0;
         // Open the input device
         uinp_fd = open("/dev/input/uinput", O_WRONLY | O_NDELAY);
-        if (uinp_fd == NULL)
+        if (!uinp_fd)
         {
         	cout << "Unable to open /dev/input/uinput" <<endl;
                 return -1;
@@ -173,7 +174,7 @@ void send_click_events( ) //not implemented yet
        	write(uinp_fd, &event, sizeof(event));
 }
 
-void send_key(__u16 code){
+void send_key_down(__u16 code){
 	// Report BUTTON CLICK - PRESS event
   	memset(&event, 0, sizeof(event));
        	gettimeofday(&event.time, NULL);
@@ -185,7 +186,9 @@ void send_key(__u16 code){
       	event.code = SYN_REPORT;
       	event.value = 0;
       	write(uinp_fd, &event, sizeof(event));
-       
+}
+
+void send_key_up(__u16 code){
 	// Report BUTTON CLICK - RELEASE event
         memset(&event, 0, sizeof(event));
         gettimeofday(&event.time, NULL);
@@ -223,7 +226,24 @@ void main_loop()
 	int mode2_code = 47; // 47 this key combination ( thumb 2 + 4 finger buttons changes to mode 2
 	int mode3_code = 63; // 63 this key combination ( thumb 1 & 2 + 4 finger buttons changes to mode 3
 
-	__u16 modes[3][64];
+	int total_modes = 2; // 0 is included in this, so 2 is really 3
+	__u16 modes[total_modes][64];
+
+
+	int total_mods = 4; // if this is changed the if statement where codes are sent needs altered also
+	int norelease = 0;
+	int justpressed = 0;
+	int modifier_state[4] = {0,0,0,0};
+
+	__u16 modifier[total_mods];
+	modifier[0] = KEY_LEFTMETA;
+	modifier[1] = KEY_LEFTCTRL;
+	modifier[2] = KEY_LEFTALT;
+	modifier[3] = KEY_LEFTSHIFT;
+	int meta = 0;
+	int ctrl = 0;
+	int alt = 0;
+	int shift = 0;
 
 	//Mappings from /usr/include/linux/input.h	
 	modes[0][1] = KEY_A;
@@ -472,33 +492,69 @@ void main_loop()
 	                                } 
 				}
 	                                // this is the "key code" that is going to be sent
+				// sanity checker, to make sure no bad data get through
+				if (send_code[0] > maxbad){send_code[0] = 0;}
+				if (send_code[1] > maxbad){send_code[1] = 0;}
+				if (send_code[2] > maxbad){send_code[2] = 0;}
+				if (send_code[3] > maxbad){send_code[3] = 0;}
+				if (send_code[4] > maxbad){send_code[4] = 0;}
+				if (send_code[5] > maxbad){send_code[5] = 0;}
+				
+				cout << "Before: 1:" << send_code[0] << " 2:"<< send_code[1] << " 3:" <<  send_code[2] << " 4:" << send_code[3] << " 5:" <<  send_code[4] << " 6:" << send_code[5] << " ctrl: " << ctrl << " alt: " << alt << " shift: " << shift << " meta: " << meta << endl;
 	                        button_code = (send_code[0] + (send_code[1] * 2) + (send_code[2] * 4) + (send_code[3] * 8) + (send_code[4] * 16) + (send_code[5] * 32));
 	                        if ((button_state[0] == 0) && (button_state[1] == 0) && (button_state[2] == 0) && (button_state[3] == 0) && (button_state[4] == 0) && (button_state[5] == 0) && (button_code != 0)){ // if all buttons are released then send the code and clear everything
-				if (button_code == mode1_code){
-					cout << "mode 0" <<endl;
-					mode = 0;
-				}
-				if (button_code == mode2_code){
-					cout << "mode 1" <<endl;
-					mode = 1;
-				}
-				if (button_code == mode3_code){
-					cout << "mode 2" <<endl;
-					mode = 2;
-				}
-	 			if ((button_code != mode1_code) && (button_code != mode2_code) && (button_code != mode3_code) && (modes[mode][button_code] != KEY_RESERVED)){
-					cout << "Sending Code: " <<  button_code << endl;
-					//cout << "Sending " << modes[mode][button_code] << endl;
-					send_key(modes[mode][button_code]);	
-				}
-				
+					if (button_code == mode1_code){
+						cout << "mode 0" <<endl;
+						mode = 0;
+					}
+					if (button_code == mode2_code){
+						cout << "mode 1" <<endl;
+						mode = 1;
+					}
+					if (button_code == mode3_code){
+						cout << "mode 2" <<endl;
+						mode = 2;
+					}
+					justpressed = 0;
+		 			if ((button_code != mode1_code) && (button_code != mode2_code) && (button_code != mode3_code) && (modes[mode][button_code] != KEY_RESERVED)){
+						cout << "Sending Down Code: " <<  button_code << endl;
+						send_key_down(modes[mode][button_code]);	
+					}
 
+					if (modes[mode][button_code] == KEY_LEFTALT){ alt = 1; justpressed = 1;}
+					if (modes[mode][button_code] == KEY_LEFTSHIFT){ shift = 1; justpressed = 1; }
+					if (modes[mode][button_code] == KEY_LEFTCTRL){ ctrl = 1; justpressed = 1; }
+					if (modes[mode][button_code] == KEY_LEFTMETA){ meta = 1; justpressed = 1; }
+				
+					if ((button_code != mode1_code) && (button_code != mode2_code) && (button_code != mode3_code) && (modes[mode][button_code] != KEY_RESERVED)){
+						if (justpressed == 0){
+							cout << "Sending Up Code: " <<  button_code << endl;
+							send_key_up(modes[mode][button_code]);	
+							if (alt == 1){ 
+								alt = 0;
+								send_key_up(KEY_LEFTALT);
+							}		
+							if (ctrl == 1){ 
+								ctrl = 0;
+								send_key_up(KEY_LEFTCTRL);
+							}
+							if (shift == 1){ 
+								shift = 0;
+								send_key_up(KEY_LEFTSHIFT);
+							}
+							if (meta == 1){ 
+								meta = 0;
+								send_key_up(KEY_LEFTMETA);
+							}
+						}
+					}	
+	
 				int clearl;
 				for (clearl=0; clearl <16; clearl++){
 					send_code[clearl] = 0;
 				}
 	                        button_code = 0;
-	                        }
+				}
 	                        break;
 		}
 	
