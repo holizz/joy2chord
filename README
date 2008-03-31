@@ -1,17 +1,21 @@
 Joy2Chord is a userlevel input driver for chorded keyboards based off of devices that can interface through /dev/input/js*.
 
-Written by Nathanael Anderson wirelessdreamer (AT) gamil (DOT) com
+Written by Nathanael Anderson wirelessdreamer (AT) gmail (DOT) com
+config file code by Rick Wagner wagnerr@umich.edu from http://www-personal.umich.edu/~wagnerr/ConfigFile.html
 
 Requirements:
-Linux uinput
+Linux uinput interface in kernel
 Linux Joystick interface in kernel
 Some type of joystick or gamepad that plays nicely with linux
 
 Currently Implemented Features:
 Multiple Modes for input
 Basic Alpha/Numeric input
+Useful handling of Special characters (alt, shift, ctrl, meta, cap, scroll, num locks )
+macros (partially supported)
+Config file support (Basic)
 
 Todo:
-Useful handling of Special characters (alt, shift, ctrl, meta, cap, scroll, num locks )
+macros should be easy to define in config file
+support for key repeating
 Helper application support
-Config file support (currently must be configured then compiled)

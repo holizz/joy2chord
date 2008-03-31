@@ -1,0 +1,21 @@
+#!/usr/bin/perl -w
+
+use strict;
+
+# this script grabs the keycodes from /usr/include/linux/input.h and outputs them for use in a program
+
+open (HEADER, "</usr/include/linux/input.h");
+my @file = <HEADER>;
+close HEADER;
+foreach my $line (@file){
+	chomp $line;
+	$line =~ s/#define //;
+	if ( $line =~ m/KEY\_/ ){
+		my @tmpvar = split /\t/, $line;
+		my $holder;
+		for (my $loop = 1; $loop < 4; $loop++){
+			$holder = $tmpvar[$loop] if (defined($tmpvar[$loop]) && !($tmpvar[$loop] =~ m/\/\*/));
+		}
+		print "\tmymap[\"$tmpvar[0]\"] = $holder;\n";
+	}
+}
