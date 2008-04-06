@@ -58,7 +58,7 @@ int debug = 0;
 int maxbad = 40000;
 int total_modes = 4; // 4 modes are used because 0 is ignored, and 1-3 are used
 __u16 modes[4][64]; //complains when not constant
-
+int joy_values[16] = {4,6,9,3,5,7,0,0,0,0,0,0,0,0,0,0}; // if no config file values are used these will be used, use these to hard code values in
 
 int open_joystick(int default_joystick)
 {
@@ -511,7 +511,14 @@ int read_config(string configfile, map<string,__u16>  & mymap, int default_joyst
 	
 	ConfigFile config (configfile);
 	config.readInto(default_joystick, "jsdev");
+	config.readInto(joy_values[0], "joy_b0");
+	config.readInto(joy_values[1], "joy_b1");
+	config.readInto(joy_values[2], "joy_b2");
+	config.readInto(joy_values[3], "joy_b3");
+	config.readInto(joy_values[4], "joy_b4");
+	config.readInto(joy_values[5], "joy_b5");
 	// cout << "Using Joystick number " << default_joystick << endl;
+	// y
 	for (int mode_loop = 1; mode_loop < total_modes; mode_loop++){	
 		ostringstream lbuffer;
 		lbuffer << mode_loop;
@@ -628,12 +635,6 @@ void main_loop(map<string,__u16> mymap)
 {
 	struct js_event js;
 
-	int joy_b1 = 4;
-	int joy_b2 = 6;
-	int joy_b3 = 9;
-	int joy_b4 = 3;
-	int joy_b5 = 5;
-	int joy_b6 = 7;
 
 	int button_state[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
 	int send_code[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
@@ -676,47 +677,47 @@ void main_loop(map<string,__u16> mymap)
 		switch(js.type & ~JS_EVENT_INIT) {
                 	case JS_EVENT_BUTTON:
 				if (js.value) { // if a button is pressed down remember its state until all buttons are released
-	                                if (js.number == joy_b1){
+	                                if (js.number == joy_values[0]){
 	                                	button_state[0] = 1;
 	                                        send_code[0] = 1;
 	                                }
-	                                if (js.number == joy_b2){
+	                                if (js.number == joy_values[1]){
 	                                        button_state[1] = 1;
 	                                        send_code[1] = 1;
 	                                }
-	                                if (js.number == joy_b3){
+	                                if (js.number == joy_values[2]){
 	                                        button_state[2] = 1;
 	                                        send_code[2] = 1;
 	                                }
-	                                if (js.number == joy_b4){
+	                                if (js.number == joy_values[3]){
 	                                        button_state[3] = 1;
 	                                        send_code[3] = 1;
 	                                }
-	                                if (js.number == joy_b5){
+	                                if (js.number == joy_values[4]){
 	                                        button_state[4] = 1;
 	                                        send_code[4] = 1;
 	                                }
-	                  		if (js.number == joy_b6){
+	                  		if (js.number == joy_values[5]){
 	                                        button_state[5] = 1;
 	                                        send_code[5] = 1;
 	                                }      
 				}else{ // track when buttons are released
-	 				if (js.number == joy_b1){
+	 				if (js.number == joy_values[0]){
 	                                        button_state[0] = 0;
 	                                }
-	                                if (js.number == joy_b2){
+	                                if (js.number == joy_values[1]){
 	                                        button_state[1] = 0;
 	                                }
-					if (js.number == joy_b3){
+					if (js.number == joy_values[2]){
 	                                        button_state[2] = 0;
 	                                }
-	                                if (js.number == joy_b4){
+	                                if (js.number == joy_values[3]){
 	                                        button_state[3] = 0;
 	                                }
-	                                if (js.number == joy_b5){
+	                                if (js.number == joy_values[4]){
 	                                        button_state[4] = 0;
 	                                }
-	                       		if (js.number == joy_b6){
+	                       		if (js.number == joy_values[5]){
 	                                        button_state[5] = 0;
 	                                } 
 				}
@@ -744,17 +745,6 @@ void main_loop(map<string,__u16> mymap)
 					if (button_code == mode2_code){
 						cout << "mode 2" <<endl;
 						mode = 2;
-						// this next block should be implemented in a more resuable manner
-						if (mode3count == 2){ // if the mode is active deactivate it
-							send_key_down(KEY_LEFTCTRL);
-							send_key_down(KEY_LEFTALT);
-							send_key_down(KEY_E);
-							send_key_up(KEY_LEFTCTRL);
-							send_key_up(KEY_LEFTALT);
-							send_key_up(KEY_E);
-							mode3count = 0;
-							mode = 1;
-						}
 						mode3count = 0;
 						mode2count++;
 						if (mode2count == 2){
@@ -774,13 +764,6 @@ void main_loop(map<string,__u16> mymap)
 					if (button_code == mode3_code){
 						cout << "mode 3" <<endl;
 						mode = 3;
-						// this next block should be implemented in a more resuable manner
-						if (mode2count == 2){ // if the mode is active deactivate it
-							send_key_up(KEY_LEFTALT);
-							send_key_up(KEY_LEFTCTRL);
-							mode2count = 0;
-							mode = 1;
-						}
 						mode2count = 0;
 						mode3count++;
 						if (mode3count == 2){
@@ -856,7 +839,7 @@ void main_loop(map<string,__u16> mymap)
 int main( int argc, char *argv[])
 {
 	int default_joystick = 0;
-	string config_file = "joy2chord-config"; // this needs to be changed to look at right files still
+	string config_file = "joy2chord-config"; 
 	int c;
 	extern char *optarg;
 	while ((c = getopt(argc, argv, "hvdc:j:")) != -1){

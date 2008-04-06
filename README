@@ -19,3 +19,9 @@ Todo:
 macros should be easy to define in config file
 support for key repeating
 Helper application support
+add button mapping helper support
+
+
+Updates:
+
+5 April 08: added support for mapping what joystick button maps to internal program buttons
