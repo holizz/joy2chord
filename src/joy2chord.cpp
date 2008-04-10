@@ -47,30 +47,56 @@
 
 using namespace std;
 
+const int MAX_BUTTONS = 128; // I ran into problems dynamically allocating how many array positions there would be for holding buttons, so using this for now
+const int MAX_MODES = 16; // same problem with dynamically allocating
+const int MAX_AXES = 128; // same problem with dynamically allocating
+const int MAX_BAD = 40000; // A workaround for handling input, This should only be a Temp Solution
+
+__u16 modes[MAX_MODES][MAX_BUTTONS]; //complains when not constant
+
+int verbose = 0;
+int debug = 0;
+int calibration = 0;
+
 static int uinp_fd = -1;
 struct uinput_user_dev uinp;       // uInput device structure
 struct input_event event; // Input device structure
-int axes;
-int joy_fd;
-int buttons;
-int verbose = 0;
-int debug = 0;
-int maxbad = 40000;
-int total_modes = 4; // 4 modes are used because 0 is ignored, and 1-3 are used
-__u16 modes[4][64]; //complains when not constant
-int joy_values[16] = {4,6,9,3,5,7,0,0,0,0,0,0,0,0,0,0}; // if no config file values are used these will be used, use these to hard code values in
 
-int open_joystick(int default_joystick)
+// int joy_values[16] = {4,6,9,3,5,7,0,0,0,0,0,0,0,0,0,0}; // if no config file values are used these will be used, use these to hard code values in
+
+class joy2chord
 {
+public:
+	string device_name;
+	string config_file;
+	__u16 modes[MAX_MODES][MAX_BUTTONS];
+	int total_modes;
+	int device_number; 
+	int buttons;
+	int axes;
+	int joy_values[MAX_BUTTONS];
+	int joy_fd;
 
+	int open_joystick();
+	int setup_uinput_device();
+	int read_config(map<string, __u16> & mymap);
+	void send_click_events();
+	void send_key_down(__u16 code);
+	void send_key_up(__u16 code);
+	int valid_key(string newkey);
+	void main_loop(map<string, __u16> mymap);
+};
+
+int joy2chord::open_joystick()
+{
         char device[256];
-        char name[128] = "Unknown";
+	char name[128];
 
-        sprintf(device, "/dev/input/js%i", default_joystick);
+        sprintf(device, "/dev/input/js%i", device_number);
 
         if ((joy_fd = open(device, O_RDONLY)) < 0) {
                 fprintf(stderr, "%s: ", TOOL_NAME); perror(device);
-                sprintf(device, "/dev/js%i", default_joystick);
+                sprintf(device, "/dev/js%i", device_number);
 
                 if ((joy_fd = open(device, O_RDONLY)) < 0) {
                         fprintf(stderr, "%s: ", TOOL_NAME); 
@@ -79,17 +105,29 @@ perror(device);
                 }
         }
 
-        ioctl(joy_fd, JSIOCGAXES, &axes);
-        ioctl(joy_fd, JSIOCGBUTTONS, &buttons);
-        ioctl(joy_fd, JSIOCGNAME(128), name);
+	int tmpaxes;
+        if (0 > ioctl(joy_fd, JSIOCGAXES, &axes))
+	{
+		cout << "Invalid Value from JSIOCGAXES" << endl;
+	}
+	if ( 0 > ioctl(joy_fd, JSIOCGBUTTONS, &buttons))
+	{
+		cout << "Invalid Value from JSIOCGBUTTONS" << endl;
+	}
+        if ( 0 > ioctl(joy_fd, JSIOCGNAME(128), name))
+	{
+		cout << "Invalid Value from JSIOCGNAME" << endl;
+	}
 
-        cout << "Using Joystick (" << name << ") through device " << device << " with " << axes << " axes and " << buttons <<" buttons." << endl;
+	device_name.assign(name);
+
+        cout << "Using Joystick " << device_number << " ( " << device_name << ") through device " << device << " with " << axes << " axes and " << buttons <<" buttons." << endl;
 
         return 0;
 }
 
 /* Setup the uinput device */
-int setup_uinput_device()
+int joy2chord::setup_uinput_device()
 {
 
         // Temporary variable
@@ -144,7 +182,8 @@ int setup_uinput_device()
        	return 1;
 }
 
-int read_config(string configfile, map<string,__u16>  & mymap, int default_joystick){
+int joy2chord::read_config(map<string,__u16>  & mymap)
+{
 /*	
 		ostringstream lbuffer;
 		lbuffer << mode_loop;
@@ -152,6 +191,7 @@ int read_config(string configfile, map<string,__u16>  & mymap, int default_joyst
 		string filename = "joy2chord-mode" + tmpname;
 		ConfigFile config(filename);
 */
+	// these values come from /usr/include/linux/input.h
 	mymap["KEY_RESERVED"] = 0;
 	mymap["KEY_ESC"] = 1;
 	mymap["KEY_1"] = 2;
@@ -509,16 +549,19 @@ int read_config(string configfile, map<string,__u16>  & mymap, int default_joyst
 	mymap["KEY_MIN_INTERESTING"] = KEY_MUTE;
 	mymap["KEY_MAX"] = 0x1ff;
 	
-	ConfigFile config (configfile);
-	config.readInto(default_joystick, "jsdev");
+	ConfigFile config (config_file);
+	
+	config.readInto(device_number, "jsdev");
 	config.readInto(joy_values[0], "joy_b0");
 	config.readInto(joy_values[1], "joy_b1");
 	config.readInto(joy_values[2], "joy_b2");
 	config.readInto(joy_values[3], "joy_b3");
 	config.readInto(joy_values[4], "joy_b4");
 	config.readInto(joy_values[5], "joy_b5");
-	// cout << "Using Joystick number " << default_joystick << endl;
-	// y
+	if (verbose){
+		cout << "Using " << config_file << " for configuration information" << endl;
+		cout << "Device: " << device_number << " Joy_values: " << joy_values[0] << " " << joy_values[1] << " " <<  joy_values[2] << " " << joy_values[3] << " " <<  joy_values[4] << " " <<  joy_values[5] << endl;
+	}
 	for (int mode_loop = 1; mode_loop < total_modes; mode_loop++){	
 		ostringstream lbuffer;
 		lbuffer << mode_loop;
@@ -531,7 +574,7 @@ int read_config(string configfile, map<string,__u16>  & mymap, int default_joyst
 			config.readInto(readvalue,itemname);
 			__u16 ukeyvalue = mymap.find(readvalue)->second;
 			if ((debug) && (readvalue != "" )){ // only read valid entries
-				cout << "adding " << readvalue << " as " << ukeyvalue;
+				cout << "adding " << readvalue << " as " << ukeyvalue << endl;
 			}
 			modes[mode_loop][key_loop] = ukeyvalue;
 			if ((debug) && (readvalue != "")){ // only read valid entries
@@ -542,7 +585,7 @@ int read_config(string configfile, map<string,__u16>  & mymap, int default_joyst
 
 }
 
-void send_click_events( ) //not implemented yet
+void joy2chord::send_click_events() //not implemented yet
 {
        	// Move pointer to (0,0) location
        	memset(&event, 0, sizeof(event));
@@ -585,7 +628,8 @@ void send_click_events( ) //not implemented yet
        	write(uinp_fd, &event, sizeof(event));
 }
 
-void send_key_down(__u16 code){
+void joy2chord::send_key_down(__u16 code)
+{
 	// Report BUTTON CLICK - PRESS event
   	memset(&event, 0, sizeof(event));
        	gettimeofday(&event.time, NULL);
@@ -599,7 +643,8 @@ void send_key_down(__u16 code){
       	write(uinp_fd, &event, sizeof(event));
 }
 
-void send_key_up(__u16 code){
+void joy2chord::send_key_up(__u16 code)
+{
 	// Report BUTTON CLICK - RELEASE event
         memset(&event, 0, sizeof(event));
         gettimeofday(&event.time, NULL);
@@ -613,7 +658,7 @@ void send_key_up(__u16 code){
       	write(uinp_fd, &event, sizeof(event));
 }
 
-int valid_key( string newkey){
+int joy2chord::valid_key( string newkey){
 	if (newkey.length() > 3){
 		string tempkey,t1,t2,t3;
 		t1 = newkey[0];
@@ -631,7 +676,7 @@ int valid_key( string newkey){
 	return -1;
 }
 
-void main_loop(map<string,__u16> mymap)
+void joy2chord::main_loop(map<string,__u16> mymap)
 {
 	struct js_event js;
 
@@ -677,6 +722,9 @@ void main_loop(map<string,__u16> mymap)
 		switch(js.type & ~JS_EVENT_INIT) {
                 	case JS_EVENT_BUTTON:
 				if (js.value) { // if a button is pressed down remember its state until all buttons are released
+					if (calibration){
+						cout << "Pressed Button " << js.number << endl;
+					}
 	                                if (js.number == joy_values[0]){
 	                                	button_state[0] = 1;
 	                                        send_code[0] = 1;
@@ -702,7 +750,10 @@ void main_loop(map<string,__u16> mymap)
 	                                        send_code[5] = 1;
 	                                }      
 				}else{ // track when buttons are released
-	 				if (js.number == joy_values[0]){
+	 				if (calibration){
+						cout << "Released Button " << js.number << endl;
+					}
+					if (js.number == joy_values[0]){
 	                                        button_state[0] = 0;
 	                                }
 	                                if (js.number == joy_values[1]){
@@ -724,12 +775,12 @@ void main_loop(map<string,__u16> mymap)
 				thiskey = modes[mode][button_code];	
 	                                // this is the "key code" that is going to be sent
 				// sanity checker, to make sure no bad data get through
-				if (send_code[0] > maxbad){send_code[0] = 0;}
-				if (send_code[1] > maxbad){send_code[1] = 0;}
-				if (send_code[2] > maxbad){send_code[2] = 0;}
-				if (send_code[3] > maxbad){send_code[3] = 0;}
-				if (send_code[4] > maxbad){send_code[4] = 0;}
-				if (send_code[5] > maxbad){send_code[5] = 0;}
+				if (send_code[0] > MAX_BAD){send_code[0] = 0;}
+				if (send_code[1] > MAX_BAD){send_code[1] = 0;}
+				if (send_code[2] > MAX_BAD){send_code[2] = 0;}
+				if (send_code[3] > MAX_BAD){send_code[3] = 0;}
+				if (send_code[4] > MAX_BAD){send_code[4] = 0;}
+				if (send_code[5] > MAX_BAD){send_code[5] = 0;}
 				
 				if (verbose){
 					cout << "Before: 1:" << send_code[0] << " 2:"<< send_code[1] << " 3:" <<  send_code[2] << " 4:" << send_code[3] << " 5:" <<  send_code[4] << " 6:" << send_code[5] << " ctrl: " << ctrl << " alt: " << alt << " shift: " << shift << " meta: " << meta << endl;
@@ -838,16 +889,19 @@ void main_loop(map<string,__u16> mymap)
 
 int main( int argc, char *argv[])
 {
-	int default_joystick = 0;
-	string config_file = "joy2chord-config"; 
 	int c;
 	extern char *optarg;
-	while ((c = getopt(argc, argv, "hvdc:j:")) != -1){
+	
+	int init_device_number = 0;
+	string init_config_file = "joy2chord-config";
+	
+	while ((c = getopt(argc, argv, "hvdbc:j:")) != -1){
 		switch (c){
 			case 'h':
-				cout << "Useage: " << TOOL_NAME << " -d -v -c [keymap_file] -j [joystick_number]" << endl;
+				cout << "Useage: " << TOOL_NAME << " -d -v -b -c [keymap_file] -j [joystick_number]" << endl;
 				cout << "	-d Enable Debug output" << endl;
 				cout << "	-v Enable Verbose output" << endl;
+				cout << "	-b Enable Calibration output" << endl;
 				cout << "	-c Specify a keymap file to use" << endl;
 				cout << "	-j Specify the joystick number to use" << endl;
 				exit(-2);
@@ -861,21 +915,33 @@ int main( int argc, char *argv[])
 				verbose = 1; 
 				break;
 			case 'c':
-				config_file = optarg; 
+				init_config_file = optarg; 
 				break;			
+			case 'b':
+				calibration = 1;
+				break;
 			case 'j':
-				default_joystick = atoi (optarg);
-				cout << "joystick number set to " << default_joystick << endl;
+				init_device_number = atoi (optarg);
+				cout << "joystick number set to " << init_device_number << endl;
 				break;
 		}
 	}
 
 	map<string,__u16> mymap;
+	
+	joy2chord myjoy;
 
-        setup_uinput_device();
-	read_config(config_file, mymap, default_joystick);
-	open_joystick(default_joystick);
-	main_loop(mymap);
+	myjoy.total_modes = 4;
+	myjoy.config_file = init_config_file;
+	myjoy.axes = 0;
+	myjoy.buttons = 0;
+
+        myjoy.setup_uinput_device();
+	myjoy.read_config(mymap);
+	myjoy.device_number = init_device_number; // once the device number is pulled from the config file, store it with the other information in the class
+	myjoy.open_joystick();
+
+	myjoy.main_loop(mymap);
 	//send_click_events();           // Send mouse event
         /* Destroy the input device */
         ioctl(uinp_fd, UI_DEV_DESTROY);

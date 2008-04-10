@@ -21,6 +21,11 @@ support for key repeating
 Helper application support
 add button mapping helper support
 
+Similar Software:
+joy2key - joy2key uses x events to send output, if you'd prefer this instead of uinput look at joy2key http://interreality.org/~tetron/technology/joy2key/
+
+joymouse - translates joystick events to mouse events. http://sourceforge.net/projects/joymouse-linux
+
 
 Updates:
 

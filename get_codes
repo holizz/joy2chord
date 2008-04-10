@@ -2,7 +2,7 @@
 
 use strict;
 
-# this script grabs the keycodes from /usr/include/linux/input.h and outputs them for use in a program
+# this script grabs the keycodes from /usr/include/linux/input.h and outputs them to stdout 
 
 open (HEADER, "</usr/include/linux/input.h");
 my @file = <HEADER>;
