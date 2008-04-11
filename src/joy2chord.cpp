@@ -47,12 +47,12 @@
 
 using namespace std;
 
-const int MAX_BUTTONS = 128; // I ran into problems dynamically allocating how many array positions there would be for holding buttons, so using this for now
+const int MAX_CODES = 512; // input.h can define up to 512 input buttons, so using 512 here too
+const int MAX_BUTTONS = 64;// I ran into problems dynamically allocating how many array positions there would be for holding buttons, so using this for now
 const int MAX_MODES = 16; // same problem with dynamically allocating
-const int MAX_AXES = 128; // same problem with dynamically allocating
-const int MAX_BAD = 40000; // A workaround for handling input, This should only be a Temp Solution
+const int MAX_AXES = 64; // same problem with dynamically allocating
+const int MAX_BAD = 40000; // A workaround for handling device initilization input, This should only be a Temp Solution
 
-__u16 modes[MAX_MODES][MAX_BUTTONS]; //complains when not constant
 
 int verbose = 0;
 int debug = 0;
@@ -67,20 +67,25 @@ class joy2chord
 public:
 	string device_name;
 	string config_file;
-	__u16 modes[MAX_MODES][MAX_BUTTONS];
+
+	// mapping variables
+	__u16 modes[MAX_MODES][MAX_CODES];
+	int mode_code[MAX_MODES];
 	int total_modes;
+	
+	// joystick variables
 	int device_number; 
 	int buttons;
 	int axes;
-	int joy_values[MAX_BUTTONS];
+	int joy_values[MAX_CODES];
 	int joy_fd;
 
 	int open_joystick();
 	int setup_uinput_device();
 	int read_config(map<string, __u16> & mymap);
 	void send_click_events();
-	void send_key_down(__u16 code);
-	void send_key_up(__u16 code);
+	void send_key_down(__u16 key_code);
+	void send_key_up(__u16 key_code);
 	int valid_key(string newkey);
 	void main_loop(map<string, __u16> mymap);
 };
@@ -561,16 +566,28 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 	config.readInto(joy_values[3], "joy_b3");
 	config.readInto(joy_values[4], "joy_b4");
 	config.readInto(joy_values[5], "joy_b5");
+	config.readInto(total_modes, "total_modes");
 	if (verbose)
 	{
 		cout << "Using " << config_file << " for configuration information" << endl;
 		cout << "Device: " << device_number << " Joy_values: " << joy_values[0] << " " << joy_values[1] << " " <<  joy_values[2] << " " << joy_values[3] << " " <<  joy_values[4] << " " <<  joy_values[5] << endl;
 	}
-	for (int mode_loop = 1; mode_loop < total_modes; mode_loop++){	
+	if (debug)
+	{
+		cout << "Starting to load standard config values from 0 to " << (total_modes * 64) << endl;
+	}
+	for (int mode_loop = 0; mode_loop <= total_modes; mode_loop++)
+	{	
 		ostringstream lbuffer;
 		lbuffer << mode_loop;
-		for (int key_loop = 1; key_loop < (64 * (total_modes - 1)); key_loop++){ 
-			// (64 * (total_modes - 1) means 64 combinations per mode, and modes 0 isn't counted so subtract one
+		string current_mode_code = lbuffer.str() + "modecode";
+		config.readInto(mode_code[mode_loop], current_mode_code ); // code used for changing modes
+		if (debug)
+		{
+			cout << " loading " << mode_code[mode_loop] << " into " << current_mode_code << endl;
+		}
+		for (int key_loop = 1; key_loop < (64 * total_modes); key_loop++)
+		{// position 0 isn't used on key loop
 			ostringstream tbuffer;
 			tbuffer << key_loop;
 			string itemname = lbuffer.str() + "key" + tbuffer.str();
@@ -588,7 +605,10 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 			}
 		}
 	}
-
+	if (debug)
+	{
+		cout << "Done Loading standard config values" << endl;	
+	}
 }
 
 void joy2chord::send_click_events() //not implemented yet
@@ -634,13 +654,13 @@ void joy2chord::send_click_events() //not implemented yet
        	write(uinp_fd, &event, sizeof(event));
 }
 
-void joy2chord::send_key_down(__u16 code)
+void joy2chord::send_key_down(__u16 key_code)
 {
 	// Report BUTTON CLICK - PRESS event
   	memset(&event, 0, sizeof(event));
        	gettimeofday(&event.time, NULL);
      	event.type = EV_KEY;
-     	event.code = code;
+     	event.code = key_code;
       	event.value = 1;
       	write(uinp_fd, &event, sizeof(event));
       	event.type = EV_SYN;
@@ -649,13 +669,13 @@ void joy2chord::send_key_down(__u16 code)
       	write(uinp_fd, &event, sizeof(event));
 }
 
-void joy2chord::send_key_up(__u16 code)
+void joy2chord::send_key_up(__u16 key_code)
 {
 	// Report BUTTON CLICK - RELEASE event
         memset(&event, 0, sizeof(event));
         gettimeofday(&event.time, NULL);
       	event.type = EV_KEY;
-      	event.code = code;
+      	event.code = key_code;
       	event.value = 0;
       	write(uinp_fd, &event, sizeof(event));
       	event.type = EV_SYN;
@@ -699,9 +719,7 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 	int doubleclick = 0;
 	int oldmode = 1;
 
-	int mode1_code = 31; // this key combination (thumb 1 + 4 finger buttons changes to mode 1
-	int mode2_code = 47; // 47 this key combination ( thumb 2 + 4 finger buttons changes to mode 2
-	int mode3_code = 63; // 63 this key combination ( thumb 1 & 2 + 4 finger buttons changes to mode 3
+	
 	__u16 lastkey = KEY_RESERVED; // initilize the last key to nothing
 	__u16 thiskey = KEY_RESERVED; // for tracking the current key
 
@@ -814,7 +832,7 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 	                        button_code = (send_code[0] + (send_code[1] * 2) + (send_code[2] * 4) + (send_code[3] * 8) + (send_code[4] * 16) + (send_code[5] * 32));
 	                        if ((button_state[0] == 0) && (button_state[1] == 0) && (button_state[2] == 0) && (button_state[3] == 0) && (button_state[4] == 0) && (button_state[5] == 0) && (button_code != 0))
 				{ // if all buttons are released then send the code and clear everything
-					if (button_code == mode1_code)
+					if (button_code == mode_code[1])
 					{
 						if (verbose)
 						{
@@ -824,7 +842,7 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 						mode2count = 0;
 						mode3count = 0;
 					}
-					if (button_code == mode2_code)
+					if (button_code == mode_code[2])
 					{
 						if (verbose)
 						{
@@ -849,7 +867,7 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 							mode = 1;
 						}	
 					}
-					if (button_code == mode3_code)
+					if (button_code == mode_code[3])
 					{
 						if (verbose)
 						{
@@ -880,7 +898,7 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 						}
 					}
 					justpressed = 0;
-		 			if ((button_code != mode1_code) && (button_code != mode2_code) && (button_code != mode3_code) && (thiskey != KEY_RESERVED))
+		 			if ((button_code != mode_code[1]) && (button_code != mode_code[2]) && (button_code != mode_code[3]) && (thiskey != KEY_RESERVED))
 					{
 						if (verbose)
 						{
@@ -895,7 +913,7 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 					if (thiskey == KEY_LEFTCTRL){ ctrl = 1; justpressed = 1; }
 					if (thiskey == KEY_LEFTMETA){ meta = 1; justpressed = 1; }
 						
-					if ((button_code != mode1_code) && (button_code != mode2_code) && (button_code != mode3_code) && (thiskey != KEY_RESERVED) && (justpressed == 0))
+					if ((button_code != mode_code[1]) && (button_code != mode_code[2]) && (button_code != mode_code[3]) && (thiskey != KEY_RESERVED) && (justpressed == 0))
 					{
 						if (verbose)
 						{
@@ -982,12 +1000,16 @@ int main( int argc, char *argv[])
 	
 	joy2chord myjoy;
 
-	myjoy.total_modes = 4;
+	// these should happen in the constructor
+	myjoy.total_modes = 0;
 	myjoy.config_file = init_config_file;
 	myjoy.axes = 0;
 	myjoy.buttons = 0;
-
-        myjoy.setup_uinput_device();
+	myjoy.mode_code[1] = 31; // this key combination (thumb 1 + 4 finger buttons changes to mode 1
+	myjoy.mode_code[2] = 47; // 47 this key combination ( thumb 2 + 4 finger buttons changes to mode 2
+	myjoy.mode_code[3] = 63; // 63 this key combination ( thumb 1 & 2 + 4 finger buttons changes to mode 3
+        
+	myjoy.setup_uinput_device();
 	myjoy.read_config(mymap);
 	myjoy.device_number = init_device_number; // once the device number is pulled from the config file, store it with the other information in the class
 	myjoy.open_joystick();

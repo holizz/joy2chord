@@ -1,5 +1,4 @@
 # Basic Config Options
-
 jsdev = 0
 joy_b0 = 4
 joy_b1 = 6
@@ -7,6 +6,12 @@ joy_b2 = 9
 joy_b3 = 3
 joy_b4 = 5
 joy_b5 = 7
+
+total_modes = 3
+
+1modecode = 31 
+2modecode = 47
+3modecode = 63
 
 # Mode One options ( form of 1key# )
 1key1 = KEY_A
