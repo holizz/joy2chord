@@ -38,6 +38,7 @@
 #include <linux/joystick.h>
 #include <sstream>
 #include <map>
+#include <errno.h>
 
 #include "ConfigFile.h" // from http://www-personal.umich.edu/~wagnerr/ConfigFile.html
 
@@ -52,6 +53,7 @@ const int MAX_BUTTONS = 64;// I ran into problems dynamically allocating how man
 const int MAX_MODES = 16; // same problem with dynamically allocating
 const int MAX_AXES = 64; // same problem with dynamically allocating
 const int MAX_BAD = 40000; // A workaround for handling device initilization input, This should only be a Temp Solution
+const int MAX_MACROS = 16; // How many macros can be understood
 
 
 int verbose = 0;
@@ -72,10 +74,13 @@ public:
 	__u16 modes[MAX_MODES][MAX_CODES];
 	int mode_code[MAX_MODES];
 	int total_modes;
+	int total_macros;
+	int macro_values[MAX_MACROS];
 	
 	// joystick variables
 	int device_number; 
-	int buttons;
+	int buttons; // how many buttons we define values for
+	int total_buttons;
 	int axes;
 	int joy_values[MAX_CODES];
 	int joy_fd;
@@ -88,6 +93,8 @@ public:
 	void send_key_up(__u16 key_code);
 	int valid_key(string newkey);
 	void main_loop(map<string, __u16> mymap);
+	void ioctl_wrapper(int uinp_fd, int UI_SETBIT, int i);
+	void macro_parser(string macro);
 };
 
 int joy2chord::open_joystick()
@@ -97,7 +104,7 @@ int joy2chord::open_joystick()
 
         sprintf(device, "/dev/input/js%i", device_number);
 
-        if ((joy_fd = open(device, O_RDONLY)) < 0) 
+        if (0 > (joy_fd = open(device, O_RDONLY))) 
 	{
 		cerr << " error opening device " << device << endl;
                 sprintf(device, "/dev/js%i", device_number);
@@ -113,9 +120,13 @@ int joy2chord::open_joystick()
 	{
 		cerr << "Invalid Value from JSIOCGAXES" << endl;
 	}
-	if ( 0 > ioctl(joy_fd, JSIOCGBUTTONS, &buttons))
+	if ( 0 > ioctl(joy_fd, JSIOCGBUTTONS, &total_buttons))
 	{
 		cerr << "Invalid Value from JSIOCGBUTTONS" << endl;
+	}
+	if (total_buttons > MAX_BUTTONS)
+	{
+		cerr << "total_buttons is greater then " << MAX_BUTTONS << " This is likely an error, but if you need support for more buttons, recompile joy2chord with a higher value for MAX_BUTTONS" << endl;
 	}
         if ( 0 > ioctl(joy_fd, JSIOCGNAME(128), name))
 	{
@@ -126,32 +137,37 @@ int joy2chord::open_joystick()
 
 	if (verbose)
 	{
-        	cout << "Using Joystick " << device_number << " ( " << device_name << ") through device " << device << " with " << axes << " axes and " << buttons <<" buttons." << endl;
+        	cout << "Using Joystick " << device_number << " ( " << device_name << ") through device " << device << " with " << axes << " axes and " << total_buttons <<" buttons." << endl;
 	}
 
         return 0;
 }
 
+void joy2chord::ioctl_wrapper(int uinp_fd, int UI_SETBIT, int i)
+{
+	if ( -1 == (ioctl(uinp_fd, UI_SET_EVBIT, i)))
+	{ 
+		cerr << "ioctl Error: " << strerror(errno) << endl; 
+		exit (-2);
+	}
+
+}
+
 /* Setup the uinput device */
 int joy2chord::setup_uinput_device()
 {
-
-        // Temporary variable
-        int i = 0;
+	int i = 0;
         // Open the input device
-        uinp_fd = open("/dev/misc/uinput", O_WRONLY | O_NDELAY);
-        if (!uinp_fd)
+        if ( -1 == (uinp_fd = open("/dev/misc/uinput", O_WRONLY | O_NDELAY)))
         {
-        	cerr << "Unable to open /dev/misc/uinput" << endl;
-        	uinp_fd = open("/dev/input/uinput", O_WRONLY | O_NDELAY);
-		if (!uinp_fd)
+        	if ( -1 == (uinp_fd = open("/dev/input/uinput", O_WRONLY | O_NDELAY)))
 		{
-			cerr << "Unable to open /dev/input/uinput" << endl;
-        		uinp_fd = open("/dev/uinput", O_WRONLY | O_NDELAY);
-			if (!uinp_fd)
+        		if ( -1 ==  (uinp_fd = open("/dev/uinput", O_WRONLY | O_NDELAY)))
 			{
+        			cerr << "Unable to open /dev/misc/uinput" << endl;
+				cerr << "Unable to open /dev/input/uinput" << endl;
 				cerr << "Unable to open /dev/uinput" << endl;
-				cerr << "Unable to open any uinput device." << endl;
+				cerr << "Unable to open any uinput device: " << strerror(errno) << endl;
 				cerr << "Please make sure the uinput module is loaded in your kernel" << endl;
 				exit(-2);
 			}
@@ -164,14 +180,13 @@ int joy2chord::setup_uinput_device()
        	uinp.id.bustype = BUS_USB;
        	
 	// Setup the uinput device
-       	ioctl(uinp_fd, UI_SET_EVBIT, EV_KEY);
-       	ioctl(uinp_fd, UI_SET_EVBIT, EV_REL);
-       	ioctl(uinp_fd, UI_SET_RELBIT, REL_X);
-       	ioctl(uinp_fd, UI_SET_RELBIT, REL_Y);
+       	ioctl_wrapper(uinp_fd, UI_SET_EVBIT, EV_KEY);
+	ioctl_wrapper(uinp_fd, UI_SET_EVBIT, EV_REL);
+	ioctl_wrapper(uinp_fd, UI_SET_RELBIT, REL_X);
+       	ioctl_wrapper(uinp_fd, UI_SET_RELBIT, REL_Y);
        	for (i=0; i < 256; i++) {
         	ioctl(uinp_fd, UI_SET_KEYBIT, i);
        	}
-       	ioctl(uinp_fd, UI_SET_KEYBIT, BTN_MOUSE);
        	ioctl(uinp_fd, UI_SET_KEYBIT, BTN_TOUCH);
        	ioctl(uinp_fd, UI_SET_KEYBIT, BTN_MOUSE);
        	ioctl(uinp_fd, UI_SET_KEYBIT, BTN_LEFT);
@@ -182,9 +197,11 @@ int joy2chord::setup_uinput_device()
        
        	/* Create input device into input sub-system */
        	write(uinp_fd, &uinp, sizeof(uinp));
-       	if (ioctl(uinp_fd, UI_DEV_CREATE))
-       	{
-        	cerr << "Unable to create UINPUT device." << endl;
+       	int result = ioctl(uinp_fd, UI_DEV_CREATE);
+       	if (result)
+	{
+        	cerr << "Unable to create UINPUT device. Error: " << strerror(errno) << endl;
+		close(uinp_fd);
                 exit (-2);
        	}
        	return 1;
@@ -556,17 +573,105 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 	mymap["KEY_BRL_DOT10"] = 0x1fa;
 	mymap["KEY_MIN_INTERESTING"] = KEY_MUTE;
 	mymap["KEY_MAX"] = 0x1ff;
-	
+	mymap["BTN_MISC"] = 0x100;
+	mymap["BTN_0"] = 0x100;
+	mymap["BTN_1"] = 0x101;
+	mymap["BTN_2"] = 0x102;
+	mymap["BTN_3"] = 0x103;
+	mymap["BTN_4"] = 0x104;
+	mymap["BTN_5"] = 0x105;
+	mymap["BTN_6"] = 0x106;
+	mymap["BTN_7"] = 0x107;
+	mymap["BTN_8"] = 0x108;
+	mymap["BTN_9"] = 0x109;
+	mymap["BTN_JOYSTICK"] = 0x120;
+	mymap["BTN_TRIGGER"] = 0x120;
+	mymap["BTN_THUMB"] = 0x121;
+	mymap["BTN_THUMB2"] = 0x122;
+	mymap["BTN_TOP"] = 0x123;
+	mymap["BTN_TOP2"] = 0x124;
+	mymap["BTN_PINKIE"] = 0x125;
+	mymap["BTN_BASE"] = 0x126;
+	mymap["BTN_BASE2"] = 0x127;
+	mymap["BTN_BASE3"] = 0x128;
+	mymap["BTN_BASE4"] = 0x129;
+	mymap["BTN_BASE5"] = 0x12a;
+	mymap["BTN_BASE6"] = 0x12b;
+	mymap["BTN_DEAD"] = 0x12f;
+	mymap["BTN_GAMEPAD"] = 0x130;
+	mymap["BTN_A"] = 0x130;
+	mymap["BTN_B"] = 0x131;
+	mymap["BTN_C"] = 0x132;
+	mymap["BTN_X"] = 0x133;
+	mymap["BTN_Y"] = 0x134;
+	mymap["BTN_Z"] = 0x135;
+	mymap["BTN_TL"] = 0x136;
+	mymap["BTN_TR"] = 0x137;
+	mymap["BTN_TL2"] = 0x138;
+	mymap["BTN_TR2"] = 0x139;
+	mymap["BTN_SELECT"] = 0x13a;
+	mymap["BTN_START"] = 0x13b;
+	mymap["BTN_MODE"] = 0x13c;
+	mymap["BTN_THUMBL"] = 0x13d;
+	mymap["BTN_THUMBR"] = 0x13e;
+	mymap["BTN_DIGI"] = 0x140;
+	mymap["BTN_TOOL_PEN"] = 0x140;
+	mymap["BTN_TOOL_RUBBER"] = 0x141;
+	mymap["BTN_TOOL_BRUSH"] = 0x142;
+	mymap["BTN_TOOL_PENCIL"] = 0x143;
+	mymap["BTN_TOOL_AIRBRUSH"] = 0x144;
+	mymap["BTN_TOOL_FINGER"] = 0x145;
+	mymap["BTN_TOOL_MOUSE"] = 0x146;
+	mymap["BTN_TOOL_LENS"] = 0x147;
+	mymap["BTN_TOUCH"] = 0x14a;
+	mymap["BTN_STYLUS"] = 0x14b;
+	mymap["BTN_STYLUS2"] = 0x14c;
+	mymap["BTN_TOOL_DOUBLETAP"] = 0x14d;
+	mymap["BTN_TOOL_TRIPLETAP"] = 0x14e;
+	mymap["BTN_WHEEL"] = 0x150;
+	mymap["BTN_GEAR_DOWN"] = 0x150;
+	mymap["BTN_GEAR_UP"] = 0x151;
+
 	ConfigFile config (config_file);
 	
-	config.readInto(device_number, "jsdev");
-	config.readInto(joy_values[0], "joy_b0");
-	config.readInto(joy_values[1], "joy_b1");
-	config.readInto(joy_values[2], "joy_b2");
-	config.readInto(joy_values[3], "joy_b3");
-	config.readInto(joy_values[4], "joy_b4");
-	config.readInto(joy_values[5], "joy_b5");
-	config.readInto(total_modes, "total_modes");
+	if (!(config.readInto(device_number, "jsdev")))
+	{
+		cerr << "Invalid entry for jsdev" << endl;
+	}
+	if (!(config.readInto(buttons, "total_buttons"))) // we don't care about how many buttons the controller provides, only about how many we have values defined for
+	{
+		cerr << "Invalid entry for total_buttons" << endl;
+	}else{
+		if (verbose)
+		{
+			cout << buttons << " buttons defined by the config file" << endl; 
+		}
+		if (buttons > total_buttons)
+		{
+			cerr << "More buttons defined then controller supports" << endl;
+		}
+	}
+	// add error checking to make sure controller provides this many buttons
+	ostringstream buttonbuffer;
+	string button_name;
+	for (int load_codes=0; load_codes < buttons; load_codes++)
+	{
+		buttonbuffer.str("");
+		buttonbuffer << load_codes;
+		button_name = "joy_b" + buttonbuffer.str();
+		if (!(config.readInto(joy_values[load_codes], button_name)))
+		{
+			cerr << "Invalid code entered for " << button_name << " of: " << joy_values[load_codes] << endl;
+		}
+	}
+	if (!(config.readInto(total_modes, "total_modes")))
+	{
+		cerr << "Invalid code for total_modes" << endl;
+	}
+	if (!(config.readInto(total_macros, "total_macros")))
+	{
+		cerr << "Invalid code for total_macros" << endl;
+	}
 	if (verbose)
 	{
 		cout << "Using " << config_file << " for configuration information" << endl;
@@ -576,12 +681,15 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 	{
 		cout << "Starting to load standard config values from 0 to " << (total_modes * 64) << endl;
 	}
-	for (int mode_loop = 0; mode_loop <= total_modes; mode_loop++)
+	for (int mode_loop = 1; mode_loop <= total_modes; mode_loop++)
 	{	
 		ostringstream lbuffer;
 		lbuffer << mode_loop;
 		string current_mode_code = lbuffer.str() + "modecode";
-		config.readInto(mode_code[mode_loop], current_mode_code ); // code used for changing modes
+		if (!(config.readInto(mode_code[mode_loop], current_mode_code )))
+		{ // code used for changing modes
+			cerr << "Invalid code for " << current_mode_code << endl;
+		}
 		if (debug)
 		{
 			cout << " loading " << mode_code[mode_loop] << " into " << current_mode_code << endl;
@@ -609,6 +717,11 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 	{
 		cout << "Done Loading standard config values" << endl;	
 	}
+}
+
+void joy2chord::macro_parser( string macro)
+{
+
 }
 
 void joy2chord::send_click_events() //not implemented yet
@@ -707,22 +820,31 @@ int joy2chord::valid_key( string newkey){
 void joy2chord::main_loop(map<string,__u16> mymap)
 {
 	struct js_event js;
-
-
-	int button_state[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
-	int send_code[16] = {0,0,0,0,0,0,0,0,0,0,0,0,0,0,0,0};
+	
 	int button_code = 0;
 	int mode = 1;
-	int mode1count = 0;
-	int mode2count = 0;
-	int mode3count = 0;
 	int doubleclick = 0;
-	int oldmode = 1;
 
+	// make an initilization function for these?
+
+	int button_state[MAX_BUTTONS];
+	for (int cleararray = 0; cleararray <= MAX_BUTTONS; cleararray++){
+		button_state[cleararray] = 0;
+	}
+	int send_code[MAX_BUTTONS];
+	for (int cleararray = 0; cleararray <= MAX_BUTTONS; cleararray++){
+		send_code[cleararray] = 0;
+	}	
+
+	int modecount[MAX_MODES];
+	for (int cleararray = 0; cleararray <= MAX_MODES; cleararray++){
+		modecount[cleararray] = 0;
+	}
 	
 	__u16 lastkey = KEY_RESERVED; // initilize the last key to nothing
 	__u16 thiskey = KEY_RESERVED; // for tracking the current key
 
+	int last_code = 0;
 	int norelease = 0;
 	int justpressed = 0;
 	int modifier_state[4] = {0,0,0,0};
@@ -751,69 +873,27 @@ void joy2chord::main_loop(map<string,__u16> mymap)
                 	case JS_EVENT_BUTTON:
 				if (js.value) 
 				{ // if a button is pressed down remember its state until all buttons are released
-					if (calibration)
+					for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
 					{
-						cout << "Pressed Button " << js.number << endl;
+						if( js.number == joy_values[allbuttons])
+						{
+							// cout << "Both the same 1: " << js.number << " 2: " << joy_values[allbuttons] << endl;
+							if (calibration)
+							{
+								printf("Pressed: %i\n",js.number);
+							}
+							button_state[allbuttons] = 1;
+							send_code[allbuttons] = 1;
+						}
 					}
-	                                if (js.number == joy_values[0])
+						}else{ // track when buttons are released
+					for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
 					{
-	                                	button_state[0] = 1;
-	                                        send_code[0] = 1;
-	                                }
-	                                if (js.number == joy_values[1])
-					{
-	                                        button_state[1] = 1;
-	                                        send_code[1] = 1;
-	                                }
-	                                if (js.number == joy_values[2])
-					{
-	                                        button_state[2] = 1;
-	                                        send_code[2] = 1;
-	                                }
-	                                if (js.number == joy_values[3])
-					{
-	                                        button_state[3] = 1;
-	                                        send_code[3] = 1;
-	                                }
-	                                if (js.number == joy_values[4])
-					{
-	                                        button_state[4] = 1;
-	                                        send_code[4] = 1;
-	                                }
-	                  		if (js.number == joy_values[5])
-					{
-	                                        button_state[5] = 1;
-	                                        send_code[5] = 1;
-	                                }      
-				}else{ // track when buttons are released
-					if (calibration)
-					{
-						cout << "Released Button " << js.number << endl;
+						if( js.number == joy_values[allbuttons])
+						{
+							button_state[allbuttons] = 0;
+						}
 					}
-					if (js.number == joy_values[0])
-					{
-	                                        button_state[0] = 0;
-	                                }
-	                                if (js.number == joy_values[1])
-					{
-	                                        button_state[1] = 0;
-	                                }
-					if (js.number == joy_values[2])
-					{
-	                                        button_state[2] = 0;
-	                                }
-	                                if (js.number == joy_values[3])
-					{
-	                                        button_state[3] = 0;
-	                                }
-	                                if (js.number == joy_values[4])
-					{
-	                                        button_state[4] = 0;
-	                                }
-	                       		if (js.number == joy_values[5])
-					{
-	                                        button_state[5] = 0;
-	                                } 
 				}
 				thiskey = modes[mode][button_code];	
 	                                // this is the "key code" that is going to be sent
@@ -825,84 +905,64 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 				if (send_code[4] > MAX_BAD){send_code[4] = 0;}
 				if (send_code[5] > MAX_BAD){send_code[5] = 0;}
 				
-				if (verbose)
+				if (debug)
 				{
-					cout << "Before: 1:" << send_code[0] << " 2:"<< send_code[1] << " 3:" <<  send_code[2] << " 4:" << send_code[3] << " 5:" <<  send_code[4] << " 6:" << send_code[5] << " ctrl: " << ctrl << " alt: " << alt << " shift: " << shift << " meta: " << meta << endl;
+					cout << "Before: ";
+					for (int allbuttons = 0; allbuttons < buttons; allbuttons++){
+						cout << allbuttons << ": " << send_code[allbuttons] << " ";
+					}
+					cout << " ctrl: " << ctrl << " alt: " << alt << " shift: " << shift << " meta: " << meta << endl;
 				}
 	                        button_code = (send_code[0] + (send_code[1] * 2) + (send_code[2] * 4) + (send_code[3] * 8) + (send_code[4] * 16) + (send_code[5] * 32));
 	                        if ((button_state[0] == 0) && (button_state[1] == 0) && (button_state[2] == 0) && (button_state[3] == 0) && (button_state[4] == 0) && (button_state[5] == 0) && (button_code != 0))
 				{ // if all buttons are released then send the code and clear everything
-					if (button_code == mode_code[1])
+					for (int macro_loop = 0; macro_loop < total_macros; macro_loop++)
 					{
-						if (verbose)
-						{
-							cout << "mode 1" <<endl;
+						if (button_code == macro_values[macro_loop])
+						{ // use a seprate loop for macros and modes
+							if (verbose)
+							{
+								cout << "Macro " << macro_loop  << endl;
+							}
+							// mode = 2;
+							// mode2count++;
+							for (int cleararray = 0; cleararray <= MAX_MODES; cleararray++)
+							{
+								modecount[cleararray] = 0;
+							}
+							/* mode3count = 0;
+							if (mode2count == 2)
+							{
+								send_key_down(KEY_LEFTCTRL);
+								send_key_down(KEY_LEFTALT);
+								send_key_down(KEY_S);
+								send_key_up(KEY_S);
+								mode = 3;
+							}
+							if (mode2count == 3)
+							{
+								send_key_up(KEY_LEFTALT);
+								send_key_up(KEY_LEFTCTRL);
+								mode2count = 0;
+								mode = 1;
+							}	*/
 						}
-						mode = 1;
-						mode2count = 0;
-						mode3count = 0;
-					}
-					if (button_code == mode_code[2])
+					}				
+					for (int mode_loop = 0; mode_loop < MAX_MODES; mode_loop++)
 					{
-						if (verbose)
+						if(mode_code[mode_loop] == button_code)
 						{
-							cout << "mode 2" <<endl;
-						}
-						mode = 2;
-						mode3count = 0;
-						mode2count++;
-						if (mode2count == 2)
-						{
-							send_key_down(KEY_LEFTCTRL);
-							send_key_down(KEY_LEFTALT);
-							send_key_down(KEY_S);
-							send_key_up(KEY_S);
-							mode = 3;
-						}
-						if (mode2count == 3)
-						{
-							send_key_up(KEY_LEFTALT);
-							send_key_up(KEY_LEFTCTRL);
-							mode2count = 0;
-							mode = 1;
-						}	
-					}
-					if (button_code == mode_code[3])
-					{
-						if (verbose)
-						{
-							cout << "mode 3" <<endl;
-						}
-						mode = 3;
-						mode2count = 0;
-						mode3count++;
-						if (mode3count == 2)
-						{
-							send_key_down(KEY_LEFTCTRL);
-							send_key_down(KEY_LEFTALT);
-							send_key_down(KEY_E);
-							send_key_up(KEY_LEFTCTRL);
-							send_key_up(KEY_LEFTALT);
-							send_key_up(KEY_E);
-						}
-						if (mode3count == 3)
-						{
-							send_key_down(KEY_LEFTCTRL);
-							send_key_down(KEY_LEFTALT);
-							send_key_down(KEY_E);
-							send_key_up(KEY_LEFTCTRL);
-							send_key_up(KEY_LEFTALT);
-							send_key_up(KEY_E);
-							mode3count = 0;
-							mode = 1;
+							cout << "Mode changed to " << mode_loop << endl;
+							mode = mode_loop;
 						}
 					}
+
 					justpressed = 0;
 		 			if ((button_code != mode_code[1]) && (button_code != mode_code[2]) && (button_code != mode_code[3]) && (thiskey != KEY_RESERVED))
 					{
-						if (verbose)
+						if (debug)
 						{
-							cout << "Sending Down Code: " <<  button_code << endl;
+							cout << "Sending Mode[" << mode << "] Down Code: " <<  button_code << endl;
 						}
 						send_key_down(thiskey);	
 						lastkey = thiskey;
@@ -915,11 +975,12 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 						
 					if ((button_code != mode_code[1]) && (button_code != mode_code[2]) && (button_code != mode_code[3]) && (thiskey != KEY_RESERVED) && (justpressed == 0))
 					{
-						if (verbose)
+						if (debug)
 						{
-							cout << "Sending Up Code: " <<  button_code << endl;
+							cout << "Sending Mode[" << mode << "] Up Code: " <<  button_code << endl;
 						}
 						send_key_up(thiskey);	
+						// alt+tab and alt+backspace support
 						if ((alt == 1) && (thiskey != KEY_TAB) && (thiskey != KEY_BACKSPACE))
 						{ 
 							alt = 0;
@@ -948,6 +1009,7 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 				}
 	                        button_code = 0;
 				doubleclick = 0;
+				// last_code
 				}
 	                        break;
 		}
@@ -1005,9 +1067,6 @@ int main( int argc, char *argv[])
 	myjoy.config_file = init_config_file;
 	myjoy.axes = 0;
 	myjoy.buttons = 0;
-	myjoy.mode_code[1] = 31; // this key combination (thumb 1 + 4 finger buttons changes to mode 1
-	myjoy.mode_code[2] = 47; // 47 this key combination ( thumb 2 + 4 finger buttons changes to mode 2
-	myjoy.mode_code[3] = 63; // 63 this key combination ( thumb 1 & 2 + 4 finger buttons changes to mode 3
         
 	myjoy.setup_uinput_device();
 	myjoy.read_config(mymap);
@@ -1017,7 +1076,12 @@ int main( int argc, char *argv[])
 	myjoy.main_loop(mymap);
 	//send_click_events();           // Send mouse event
         /* Destroy the input device */
-        ioctl(uinp_fd, UI_DEV_DESTROY);
+	int destroy = ioctl(uinp_fd, UI_DEV_DESTROY);
+       	if (destroy)
+	{
+        	cerr << "Unable to destroy UINPUT device. Error: " << strerror(errno) << endl;
+                exit (-2);
+       	}
         /* Close the UINPUT device */
         close(uinp_fd);
 }

@@ -1,5 +1,28 @@
+#   Why a 6 button controller as the default config?
+#
+#  Default Config File for joy2chord by Nathanael Anderson
+#  wir ele ssdr eamer A@T gmail D0T com
+#
+# 1. Thats what I built, so the config is made and tested
+# 2. One button for each finger, 2 for the thumb, fingers don't 
+#    have to move very far at all.
+# 3. 64 combinations per mode, I used 3 modes, define whatever you want 
+#    for each, I started with 5 buttons and 32 combinations, but I had 
+#    to change modes to often with this setup, so i added a 6th button
+#
+#   Why A Joystick as a Chorded Keyboard?
+# 
+# Gamepads and joysticks are dirt cheap, chorded keyboards ... usually aren't 
+# I wanted to play around with this for a while, so if its useful to you, 
+# enjoy, if not ignore it :)
+#
+#
 # Basic Config Options
-jsdev = 0
+jsdev = 0 # if device hooked up to /dev/input/js0 set jsdev = 0
+
+total_buttons = 6 # The hardware used may provide more buttons then we use, so only cycle through as many as we use
+
+# use joy_b0, and increment for every button you use, map buttons to the joystick code they send
 joy_b0 = 4
 joy_b1 = 6
 joy_b2 = 9
@@ -7,12 +30,24 @@ joy_b3 = 3
 joy_b4 = 5
 joy_b5 = 7
 
+# How many modes do you want to define
 total_modes = 3
+
+# what key combinations toggle modes
+# Examples:
+# on a 6 button controller pressing buttons
+# 1modecode = 31
+# 1,2,3,4,5 = 1+2+4+8+16 = 31
+# 2modecode = 47
+# 1,2,3,4,6 = 1+2+4+8+32 = 47
+# 3modecode = 63
+# 1,2,3,4,5,6 = 1+2+4+8+16+32 = 63
 
 1modecode = 31 
 2modecode = 47
 3modecode = 63
 
+# all valid codes come from /usr/include/linux/input.h
 # Mode One options ( form of 1key# )
 1key1 = KEY_A
 1key2 = KEY_B
