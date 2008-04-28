@@ -11,7 +11,7 @@ Some type of joystick or gamepad that plays nicely with linux
 Currently Implemented Features:
 Multiple Modes for input
 Basic Alpha/Numeric input
-Useful handling of Special characters (alt, shift, ctrl, meta, cap, scroll, num locks )
+Useful handling of Special characters (alt, shift, ctrl, meta, cap, scroll, num locks ) ( hold all modifiers down untill a non modifier is pressed )
 Config file support (Basic)
 Calibration assitance ( run with -b and joy2chord will tell you what button number you pressed)
 

@@ -55,7 +55,7 @@ const int MAX_MODES = 16; // same problem with dynamically allocating
 const int MAX_AXES = 64; // same problem with dynamically allocating
 const int MAX_BAD = 40000; // A workaround for handling device initilization input, This should only be a Temp Solution
 const int MAX_MACROS = 16; // How many macros can be understood
-
+const int MAX_MODIFIERS = 8; // How many modifier codes can be used (ctrl, alt, meta, etc) these keys are held down untill a non modifier is held down
 
 int verbose = 0;
 int debug = 0;
@@ -73,18 +73,30 @@ public:
 
 	// mapping variables
 	__u16 modes[MAX_MODES][MAX_CODES];
-	int mode_code[MAX_MODES];
+	__u16 modifier[MAX_MODIFIERS];
+	int total_modifiers;
+	int modifier_state[MAX_MODIFIERS];
 	int total_modes;
+	int mode_code[MAX_MODES];
 	int total_macros;
 	int macro_values[MAX_MACROS];
+	int mode;
+	int button_state[MAX_BUTTONS];
+	int send_code[MAX_BUTTONS];
+	int modecount[MAX_MODES];
+	int button_code;
 	
 	// joystick variables
 	int device_number; 
 	int buttons; // how many buttons we define values for
 	int total_buttons;
 	int axes;
+	int total_axes;
 	int joy_values[MAX_CODES];
 	int joy_fd;
+	__u16 lastkey;
+	__u16 thiskey;
+	int justpressed;
 
 	int open_joystick();
 	int setup_uinput_device();
@@ -92,6 +104,7 @@ public:
 	void send_click_events();
 	void send_key_down(__u16 key_code);
 	void send_key_up(__u16 key_code);
+	void process_events(js_event js);
 	int valid_key(string newkey);
 	void main_loop(map<string, __u16> mymap);
 	void ioctl_wrapper(int uinp_fd, int UI_SETBIT, int i);
@@ -102,6 +115,8 @@ int joy2chord::open_joystick()
 {
         char device[256];
 	char name[128];
+	//total_buttons = 0;
+	//total_axes = 0;
 
         sprintf(device, "/dev/input/js%i", device_number);
 
@@ -129,7 +144,11 @@ int joy2chord::open_joystick()
 	{
 		cerr << "total_buttons is greater then " << MAX_BUTTONS << " This is likely an error, but if you need support for more buttons, recompile joy2chord with a higher value for MAX_BUTTONS" << endl;
 	}
-        if ( 0 > ioctl(joy_fd, JSIOCGNAME(128), name))
+        if (buttons > total_buttons)
+	{
+		cerr << "More buttons (" << buttons << ") defined then controller supports (" << total_buttons << ")" << endl;
+	}
+	if ( 0 > ioctl(joy_fd, JSIOCGNAME(128), name))
 	{
 		cerr << "Invalid Value from JSIOCGNAME" << endl;
 	}
@@ -138,7 +157,7 @@ int joy2chord::open_joystick()
 
 	if (verbose)
 	{
-        	cout << "Using Joystick " << device_number << " ( " << device_name << ") through device " << device << " with " << axes << " axes and " << total_buttons <<" buttons." << endl;
+        	cout << "Using Joystick " << device_number << " ( " << device_name << ") through device " << device << " with " << total_axes << " axes and " << total_buttons <<" buttons." << endl;
 	}
 
         return 0;
@@ -649,11 +668,7 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 		{
 			cout << buttons << " buttons defined by the config file" << endl; 
 		}
-		if (buttons > total_buttons)
-		{
-			cerr << "More buttons defined then controller supports" << endl;
-		}
-	}
+			}
 	ostringstream buttonbuffer;
 	string button_name;
 	for (int load_codes=0; load_codes < buttons; load_codes++)
@@ -673,6 +688,25 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 	if (!(config.readInto(total_macros, "total_macros")))
 	{
 		cerr << "Invalid code for total_macros" << endl;
+	}
+	if (!(config.readInto(total_modifiers, "total_modifiers")))
+	{
+		cerr << "Invalid code for total_modifiers" << endl;
+	}else{
+		for(int loadmacro = 1; loadmacro <= total_modifiers; loadmacro++)
+		{
+			ostringstream mbuffer;
+			mbuffer << loadmacro;
+			string current_modifier_code = mbuffer.str() + "modifier";	
+			string tmpstring = "";
+			if (!(config.readInto(tmpstring, current_modifier_code)))
+			{
+				cerr << " Invalid code for " << current_modifier_code << endl;
+			}else{
+				__u16 ukeyvalue = mymap.find(tmpstring)->second;
+				modifier[loadmacro] = ukeyvalue;
+			}
+		}
 	}
 	if (verbose)
 	{
@@ -694,7 +728,7 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 		}
 		if (debug)
 		{
-			cout << " loading " << mode_code[mode_loop] << " into " << current_mode_code << endl;
+			cout << "Adding Mode " << mode_code[mode_loop] << " into " << current_mode_code << endl;
 		}
 		for (int key_loop = 1; key_loop < (pow(2,buttons)); key_loop++)
 		{// position 0 isn't used on key loop
@@ -709,12 +743,11 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 			__u16 ukeyvalue = mymap.find(readvalue)->second;
 			if ((debug) && (readvalue != "" ))
 			{ // only read valid entries
-				cout << "adding " << readvalue << " as " << ukeyvalue << endl;
 			}
 			modes[mode_loop][key_loop] = ukeyvalue;
 			if ((debug) && (readvalue != ""))
 			{ // only read valid entries
-				cout << " input: "<< itemname << " of mode[" << mode_loop << "][" << key_loop << "] " << modes[mode_loop][key_loop] << endl;
+				cout << "Adding " << readvalue << "[" << ukeyvalue << "]" << " to mode[" << mode_loop << "][" << key_loop << "] " << endl;
 			}
 		}
 	}
@@ -826,271 +859,244 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 {
 	struct js_event js;
 	
-	int button_code = 0;
-	int mode = 1;
-	int doubleclick = 0;
-
 	// make an initilization function for these?
 
-	int button_state[MAX_BUTTONS];
 	for (int cleararray = 0; cleararray <= MAX_BUTTONS; cleararray++){
 		button_state[cleararray] = 0;
 	}
-	int send_code[MAX_BUTTONS];
 	for (int cleararray = 0; cleararray <= MAX_BUTTONS; cleararray++){
 		send_code[cleararray] = 0;
 	}	
 
-	int modecount[MAX_MODES];
 	for (int cleararray = 0; cleararray <= MAX_MODES; cleararray++){
 		modecount[cleararray] = 0;
 	}
 	
-	__u16 lastkey = KEY_RESERVED; // initilize the last key to nothing
-	__u16 thiskey = KEY_RESERVED; // for tracking the current key
+	lastkey = KEY_RESERVED; // initilize the last key to nothing
+	thiskey = KEY_RESERVED; // for tracking the current key
 
-	int last_code = 0;
-	int norelease = 0;
-	int justpressed = 0;
-	int modifier_state[4] = {0,0,0,0};
+	justpressed = 0;
 
-	__u16 modifier[4];
-	modifier[0] = KEY_LEFTMETA;
-	modifier[1] = KEY_LEFTCTRL;
-	modifier[2] = KEY_LEFTALT;
-	modifier[3] = KEY_LEFTSHIFT;
-	int meta = 0;
-	int ctrl = 0;
-	int alt = 0;
-	int shift = 0;
-
-	// position 0 never gets touched
-
-		while (1){
+	while (1){
 		if (read(joy_fd, &js, sizeof(struct js_event)) != sizeof(struct js_event)) 
 		{
 			perror(TOOL_NAME ": error reading from joystick device");
 			exit (-5);
 		}
-		switch(js.type & ~JS_EVENT_INIT) 
-		{
-                	case JS_EVENT_BUTTON:
-				if (js.value) 
-				{ // if a button is pressed down remember its state until all buttons are released
-					for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
+		process_events(js);
+	}//while
+}
+void joy2chord::process_events(js_event js)
+{
+	switch(js.type & ~JS_EVENT_INIT) 
+	{
+               	case JS_EVENT_BUTTON:
+			if (js.value) 
+			{ // if a button is pressed down remember its state until all buttons are released
+				for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
+				{
+					if( js.number == joy_values[allbuttons])
 					{
-						if( js.number == joy_values[allbuttons])
+						if (calibration)
 						{
-							if (calibration)
-							{
-								printf("Pressed: %i\n",js.number);
-							}
-							/*if (debug)
-							{
-								printf("Pressed: %i\n",js.number);
-							}*/
-							button_state[allbuttons] = 1;
-							send_code[allbuttons] = 1;
+							printf("Pressed: %i\n",js.number);
 						}
-					}
-				}else{ // track when buttons are released
-					for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
-					{
-						if( js.number == joy_values[allbuttons])
+						/*if (debug)
 						{
-							button_state[allbuttons] = 0;
-							/*if (debug)
-							{	
-								printf("Released: %i\n",js.number);
-							}*/
-						}
+							printf("Pressed: %i\n",js.number);
+						}*/
+						button_state[allbuttons] = 1;
+						send_code[allbuttons] = 1;
 					}
 				}
-				thiskey = modes[mode][button_code];	
-				// sanity checker, to make sure no bad data get through
-				for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+			}else{ // track when buttons are released
+				for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
 				{
-					if (send_code[allbuttons] > MAX_BAD)
+		
 					{
-						// this is a workaround for when bad values are input
-						send_code[allbuttons] = 0;
+						button_state[allbuttons] = 0;
+						/*if (debug)
+						{	
+							printf("Released: %i\n",js.number);
+						}*/
 					}
 				}
-				
-				if (debug)
+			}
+			// sanity checker, to make sure no bad data get through
+			for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+			{
+				if (send_code[allbuttons] > MAX_BAD)
 				{
-					cout << "Button State: ";
-					for (int allbuttons = 0; allbuttons < buttons; allbuttons++){
-						cout << allbuttons << ": " << send_code[allbuttons] << " ";
-					}
-					cout << " ctrl: " << ctrl << " alt: " << alt << " shift: " << shift << " meta: " << meta << endl;
+					// this is a workaround for when bad values are input
+					send_code[allbuttons] = 0;
 				}
-	                        // this is the "key code" that is going to be sent
-				button_code = 0;
-				for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+			}
+			
+			if (debug)
+			{
+				cout << "Button State: ";
+				for (int allbuttons = 0; allbuttons < buttons; allbuttons++){
+					cout << allbuttons << ":" << send_code[allbuttons] << " ";
+				}
+				cout << endl;
+			}
+                        // this is the "key code" that is going to be sent
+			button_code = 0;
+			for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+			{
+				if (allbuttons == 0 )
 				{
-					if (allbuttons == 0 )
-					{
-						button_code += send_code[allbuttons];
-					}
-					else
-					{
+					button_code += send_code[allbuttons];
+				}
+				else
+				{
 						button_code += (send_code[allbuttons] * pow(2,allbuttons));
-					}
 				}
+			}
+			thiskey = modes[mode][button_code];	
+			/*if (debug)
+			{
+				cout << "button code: " << button_code << endl;
+			}*/
+			int clear = 0;
+			if (0 == button_code)
+			{
 				/*if (debug)
 				{
-					cout << "button code: " << button_code << endl;
+					cout << "No code to send" << endl;
 				}*/
-				int clear = 0;
-				if (button_code == 0)
+				clear++;
+			}
+			for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
+			{
+				if (button_state[allbuttons] != 0)
 				{
 					/*if (debug)
 					{
-						cout << "No code to send" << endl;
+						cout << "Not clear, button defined in config file as " << allbuttons << " is set" << endl;
 					}*/
 					clear++;
 				}
-				for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
+			}
+			if (clear == 0)
+			{ // if all buttons are released then send the code and clear everything
+				for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
 				{
-					if (button_state[allbuttons] != 0)
-					{
-						/*if (debug)
+					send_code[allbuttons] = 0;
+				}
+				for (int macro_loop = 0; macro_loop < total_macros; macro_loop++)
+				{
+					if (button_code == macro_values[macro_loop])
+					{ // use a seprate loop for macros and modes
+						if (verbose)
 						{
-							cout << "Not clear, button defined in config file as " << allbuttons << " is set" << endl;
-						}*/
-						clear++;
+							cout << "Macro " << macro_loop  << endl;
+						}
+						// mode = 2;
+						// mode2count++;
+						for (int cleararray = 0; cleararray <= MAX_MODES; cleararray++)
+						{
+							modecount[cleararray] = 0;
+						}
+						/* mode3count = 0;
+						if (mode2count == 2)
+						{
+							send_key_down(KEY_LEFTCTRL);
+							send_key_down(KEY_LEFTALT);
+							send_key_down(KEY_S);
+							send_key_up(KEY_S);
+							mode = 3;
+						}
+						if (mode2count == 3)
+						{
+							send_key_up(KEY_LEFTALT);
+							send_key_up(KEY_LEFTCTRL);
+							mode2count = 0;
+							mode = 1;
+						}	*/
+					}
+				}				
+				for (int mode_loop = 0; mode_loop < MAX_MODES; mode_loop++)
+				{
+					if( mode_code[mode_loop] == button_code)
+					{
+						cout << "Mode changed to " << mode_loop << endl;
+						mode = mode_loop;
 					}
 				}
-				if (clear == 0)
-				{ // if all buttons are released then send the code and clear everything
-					for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+				justpressed = 0;
+				int senddown = 0;
+				for (int allbuttons = 0; allbuttons < total_modes; allbuttons++)
+				{
+					// if no mode button is pressed down, and key is not defined as KEY_RESERVED
+					if(( button_code == mode_code[allbuttons]) || (button_code == KEY_RESERVED ))
 					{
-						send_code[allbuttons] = 0;
+						senddown++;
 					}
-					for (int macro_loop = 0; macro_loop < total_macros; macro_loop++)
+				}
+				if (0 == senddown)
+				{
+					if (debug)
 					{
-						if (button_code == macro_values[macro_loop])
-						{ // use a seprate loop for macros and modes
-							if (verbose)
-							{
-								cout << "Macro " << macro_loop  << endl;
-							}
-							// mode = 2;
-							// mode2count++;
-							for (int cleararray = 0; cleararray <= MAX_MODES; cleararray++)
-							{
-								modecount[cleararray] = 0;
-							}
-							/* mode3count = 0;
-							if (mode2count == 2)
-							{
-								send_key_down(KEY_LEFTCTRL);
-								send_key_down(KEY_LEFTALT);
-								send_key_down(KEY_S);
-								send_key_up(KEY_S);
-								mode = 3;
-							}
-							if (mode2count == 3)
-							{
-								send_key_up(KEY_LEFTALT);
-								send_key_up(KEY_LEFTCTRL);
-								mode2count = 0;
-								mode = 1;
-							}	*/
-						}
-					}				
-					for (int mode_loop = 0; mode_loop < MAX_MODES; mode_loop++)
-					{
-						if( mode_code[mode_loop] == button_code)
-						{
-							cout << "Mode changed to " << mode_loop << endl;
-							mode = mode_loop;
-						}
+						cout << "Sending Mode[" << mode << "] Down Code: " <<  button_code << endl;
 					}
-
-					justpressed = 0;
-					int senddown = 0;
-					for (int allbuttons = 0; allbuttons < total_modes; allbuttons++)
+					send_key_down(thiskey);	
+					lastkey = thiskey;
+				}
+					for (int mbuttons = 1; mbuttons <= total_modifiers; mbuttons++)
+				{
+					if (thiskey == modifier[mbuttons])
 					{
-						// if no mode button is pressed down, and key is not defined as KEY_RESERVED
-						if(( button_code == mode_code[allbuttons]) || (button_code == KEY_RESERVED ))
-						{
-							senddown++;
-						}
-					}
-					if (0 == senddown)
-					{
+						modifier_state[mbuttons] = 1;
+						justpressed = 1;
 						if (debug)
 						{
-							cout << "Sending Mode[" << mode << "] Down Code: " <<  button_code << endl;
+							cout << "Set Modifier State " << mbuttons << endl;
 						}
-						send_key_down(thiskey);	
-						lastkey = thiskey;
 					}
-
-					if (thiskey == KEY_LEFTALT){ alt = 1; justpressed = 1;}
-					if (thiskey == KEY_LEFTSHIFT){ shift = 1; justpressed = 1; }
-					if (thiskey == KEY_LEFTCTRL){ ctrl = 1; justpressed = 1; }
-					if (thiskey == KEY_LEFTMETA){ meta = 1; justpressed = 1; }
-						
-					// if ((button_code != mode_code[1]) && (button_code != mode_code[2]) && (button_code != mode_code[3]) && (thiskey != KEY_RESERVED) && (0 == justpressed))
+				}
+				int sendup = 0;
+				for (int allbuttons = 0; allbuttons < total_modes; allbuttons++)
+				{
+					// if no mode button is pressed down, and key is not defined as KEY_RESERVED, and button was just pressed
+					if((( button_code == mode_code[allbuttons]) || (button_code == KEY_RESERVED )) && (0 == justpressed))
+					{
+						sendup++;
+					}
+					if (1 == justpressed) 
+					{
+						sendup++;
+					}
+				}
+				if (0 == sendup)
+				{
+					if (debug)
+					{
+						cout << "Sending Mode[" << mode << "] Up Code: " <<  button_code << endl;
+					}
+					send_key_up(thiskey);	
 					
-					int sendup = 0;
-					for (int allbuttons = 0; allbuttons < total_modes; allbuttons++)
+					for (int mbuttons = 1; mbuttons <= total_modifiers; mbuttons++)
 					{
-						// if no mode button is pressed down, and key is not defined as KEY_RESERVED, and button was just pressed
-						if((( button_code == mode_code[allbuttons]) || (button_code == KEY_RESERVED )) && (0 == justpressed))
+						if (1 == modifier_state[mbuttons])
 						{
-							sendup++;
-						}
-						if (1 == justpressed) 
-						{
-							sendup++;
+							if (debug)
+							{
+								cout << "Cleared Modifier State " << mbuttons << endl;
+							}
+							modifier_state[mbuttons] = 0;
+							send_key_up(modifier[mbuttons]);
 						}
 					}
-					if (0 == sendup)
-					{
-						if (debug)
-						{
-							cout << "Sending Mode[" << mode << "] Up Code: " <<  button_code << endl;
-						}
-							send_key_up(thiskey);	
-						// alt+tab and alt+backspace support
-						if ((alt == 1) && (thiskey != KEY_TAB) && (thiskey != KEY_BACKSPACE))
-						{ 
-							alt = 0;
-							send_key_up(KEY_LEFTALT);
-						}		
-						if (ctrl == 1)
-						{ 
-							ctrl = 0;
-							send_key_up(KEY_LEFTCTRL);
-						}
-						if (shift == 1)
-						{ 
-							shift = 0;
-							send_key_up(KEY_LEFTSHIFT);
-						}
-						if (meta == 1)
-						{ 
-							meta = 0;
-							send_key_up(KEY_LEFTMETA);
-						}
-					}	
-	
+				}	
+
 				int clearl;
 				for (clearl=0; clearl < buttons; clearl++){
 					send_code[clearl] = 0;
 				}
-	                        button_code = 0;
-				doubleclick = 0;
-				// last_code
-				}
-	                        break;
-		}
-	
-		}//while
+			}
+                        break;
+	}
 }
 
 int main( int argc, char *argv[])
@@ -1142,6 +1148,11 @@ int main( int argc, char *argv[])
 	myjoy.config_file = init_config_file;
 	myjoy.axes = 0;
 	myjoy.buttons = 0;
+	myjoy.mode = 1;
+	for (int allmodifier = 0; allmodifier < MAX_MODIFIERS; allmodifier++)
+	{
+		myjoy.modifier[allmodifier] = 0;
+	}
         
 	myjoy.setup_uinput_device();
 	myjoy.read_config(mymap);
