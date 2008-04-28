@@ -36,6 +36,7 @@
 #include <cstring>
 #include <string>
 #include <linux/joystick.h>
+#include <math.h>
 #include <sstream>
 #include <map>
 #include <errno.h>
@@ -184,6 +185,8 @@ int joy2chord::setup_uinput_device()
 	ioctl_wrapper(uinp_fd, UI_SET_EVBIT, EV_REL);
 	ioctl_wrapper(uinp_fd, UI_SET_RELBIT, REL_X);
        	ioctl_wrapper(uinp_fd, UI_SET_RELBIT, REL_Y);
+
+	// these parts need better error checker, or fix ioctrl_wrapper so it works with them
        	for (i=0; i < 256; i++) {
         	ioctl(uinp_fd, UI_SET_KEYBIT, i);
        	}
@@ -651,7 +654,6 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 			cerr << "More buttons defined then controller supports" << endl;
 		}
 	}
-	// add error checking to make sure controller provides this many buttons
 	ostringstream buttonbuffer;
 	string button_name;
 	for (int load_codes=0; load_codes < buttons; load_codes++)
@@ -679,7 +681,7 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 	}
 	if (debug)
 	{
-		cout << "Starting to load standard config values from 0 to " << (total_modes * 64) << endl;
+		cout << "Starting to load standard config values from 0 to " << pow(2,buttons) << endl;
 	}
 	for (int mode_loop = 1; mode_loop <= total_modes; mode_loop++)
 	{	
@@ -694,13 +696,16 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 		{
 			cout << " loading " << mode_code[mode_loop] << " into " << current_mode_code << endl;
 		}
-		for (int key_loop = 1; key_loop < (64 * total_modes); key_loop++)
+		for (int key_loop = 1; key_loop < (pow(2,buttons)); key_loop++)
 		{// position 0 isn't used on key loop
 			ostringstream tbuffer;
 			tbuffer << key_loop;
 			string itemname = lbuffer.str() + "key" + tbuffer.str();
 			string readvalue = "";
-			config.readInto(readvalue,itemname);
+			if (!(config.readInto(readvalue,itemname)))
+			{
+				cerr << "Invalid entry for value: " << itemname << endl;
+			}
 			__u16 ukeyvalue = mymap.find(readvalue)->second;
 			if ((debug) && (readvalue != "" ))
 			{ // only read valid entries
@@ -867,7 +872,6 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 			perror(TOOL_NAME ": error reading from joystick device");
 			exit (-5);
 		}
-
 		switch(js.type & ~JS_EVENT_INIT) 
 		{
                 	case JS_EVENT_BUTTON:
@@ -877,45 +881,93 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 					{
 						if( js.number == joy_values[allbuttons])
 						{
-							// cout << "Both the same 1: " << js.number << " 2: " << joy_values[allbuttons] << endl;
 							if (calibration)
 							{
 								printf("Pressed: %i\n",js.number);
 							}
+							/*if (debug)
+							{
+								printf("Pressed: %i\n",js.number);
+							}*/
 							button_state[allbuttons] = 1;
 							send_code[allbuttons] = 1;
 						}
 					}
-						}else{ // track when buttons are released
+				}else{ // track when buttons are released
 					for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
 					{
 						if( js.number == joy_values[allbuttons])
 						{
 							button_state[allbuttons] = 0;
+							/*if (debug)
+							{	
+								printf("Released: %i\n",js.number);
+							}*/
 						}
 					}
 				}
 				thiskey = modes[mode][button_code];	
-	                                // this is the "key code" that is going to be sent
 				// sanity checker, to make sure no bad data get through
-				if (send_code[0] > MAX_BAD){send_code[0] = 0;}
-				if (send_code[1] > MAX_BAD){send_code[1] = 0;}
-				if (send_code[2] > MAX_BAD){send_code[2] = 0;}
-				if (send_code[3] > MAX_BAD){send_code[3] = 0;}
-				if (send_code[4] > MAX_BAD){send_code[4] = 0;}
-				if (send_code[5] > MAX_BAD){send_code[5] = 0;}
+				for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+				{
+					if (send_code[allbuttons] > MAX_BAD)
+					{
+						// this is a workaround for when bad values are input
+						send_code[allbuttons] = 0;
+					}
+				}
 				
 				if (debug)
 				{
-					cout << "Before: ";
+					cout << "Button State: ";
 					for (int allbuttons = 0; allbuttons < buttons; allbuttons++){
 						cout << allbuttons << ": " << send_code[allbuttons] << " ";
 					}
 					cout << " ctrl: " << ctrl << " alt: " << alt << " shift: " << shift << " meta: " << meta << endl;
 				}
-	                        button_code = (send_code[0] + (send_code[1] * 2) + (send_code[2] * 4) + (send_code[3] * 8) + (send_code[4] * 16) + (send_code[5] * 32));
-	                        if ((button_state[0] == 0) && (button_state[1] == 0) && (button_state[2] == 0) && (button_state[3] == 0) && (button_state[4] == 0) && (button_state[5] == 0) && (button_code != 0))
+	                        // this is the "key code" that is going to be sent
+				button_code = 0;
+				for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+				{
+					if (allbuttons == 0 )
+					{
+						button_code += send_code[allbuttons];
+					}
+					else
+					{
+						button_code += (send_code[allbuttons] * pow(2,allbuttons));
+					}
+				}
+				/*if (debug)
+				{
+					cout << "button code: " << button_code << endl;
+				}*/
+				int clear = 0;
+				if (button_code == 0)
+				{
+					/*if (debug)
+					{
+						cout << "No code to send" << endl;
+					}*/
+					clear++;
+				}
+				for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
+				{
+					if (button_state[allbuttons] != 0)
+					{
+						/*if (debug)
+						{
+							cout << "Not clear, button defined in config file as " << allbuttons << " is set" << endl;
+						}*/
+						clear++;
+					}
+				}
+				if (clear == 0)
 				{ // if all buttons are released then send the code and clear everything
+					for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+					{
+						send_code[allbuttons] = 0;
+					}
 					for (int macro_loop = 0; macro_loop < total_macros; macro_loop++)
 					{
 						if (button_code == macro_values[macro_loop])
@@ -950,7 +1002,7 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 					}				
 					for (int mode_loop = 0; mode_loop < MAX_MODES; mode_loop++)
 					{
-						if(mode_code[mode_loop] == button_code)
+						if( mode_code[mode_loop] == button_code)
 						{
 							cout << "Mode changed to " << mode_loop << endl;
 							mode = mode_loop;
@@ -958,7 +1010,16 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 					}
 
 					justpressed = 0;
-		 			if ((button_code != mode_code[1]) && (button_code != mode_code[2]) && (button_code != mode_code[3]) && (thiskey != KEY_RESERVED))
+					int senddown = 0;
+					for (int allbuttons = 0; allbuttons < total_modes; allbuttons++)
+					{
+						// if no mode button is pressed down, and key is not defined as KEY_RESERVED
+						if(( button_code == mode_code[allbuttons]) || (button_code == KEY_RESERVED ))
+						{
+							senddown++;
+						}
+					}
+					if (0 == senddown)
 					{
 						if (debug)
 						{
@@ -973,13 +1034,28 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 					if (thiskey == KEY_LEFTCTRL){ ctrl = 1; justpressed = 1; }
 					if (thiskey == KEY_LEFTMETA){ meta = 1; justpressed = 1; }
 						
-					if ((button_code != mode_code[1]) && (button_code != mode_code[2]) && (button_code != mode_code[3]) && (thiskey != KEY_RESERVED) && (justpressed == 0))
+					// if ((button_code != mode_code[1]) && (button_code != mode_code[2]) && (button_code != mode_code[3]) && (thiskey != KEY_RESERVED) && (0 == justpressed))
+					
+					int sendup = 0;
+					for (int allbuttons = 0; allbuttons < total_modes; allbuttons++)
+					{
+						// if no mode button is pressed down, and key is not defined as KEY_RESERVED, and button was just pressed
+						if((( button_code == mode_code[allbuttons]) || (button_code == KEY_RESERVED )) && (0 == justpressed))
+						{
+							sendup++;
+						}
+						if (1 == justpressed) 
+						{
+							sendup++;
+						}
+					}
+					if (0 == sendup)
 					{
 						if (debug)
 						{
 							cout << "Sending Mode[" << mode << "] Up Code: " <<  button_code << endl;
 						}
-						send_key_up(thiskey);	
+							send_key_up(thiskey);	
 						// alt+tab and alt+backspace support
 						if ((alt == 1) && (thiskey != KEY_TAB) && (thiskey != KEY_BACKSPACE))
 						{ 
@@ -1004,7 +1080,7 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 					}	
 	
 				int clearl;
-				for (clearl=0; clearl <16; clearl++){
+				for (clearl=0; clearl < buttons; clearl++){
 					send_code[clearl] = 0;
 				}
 	                        button_code = 0;
@@ -1013,7 +1089,6 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 				}
 	                        break;
 		}
-	
 	
 		}//while
 }

@@ -12,14 +12,13 @@ Currently Implemented Features:
 Multiple Modes for input
 Basic Alpha/Numeric input
 Useful handling of Special characters (alt, shift, ctrl, meta, cap, scroll, num locks )
-macros (partially supported)
 Config file support (Basic)
+Calibration assitance ( run with -b and joy2chord will tell you what button number you pressed)
 
 Todo:
 macros should be easy to define in config file
 support for key repeating
 Helper application support
-add button mapping helper support
 
 Similar Software:
 joy2key - joy2key uses x events to send output, if you'd prefer this instead of uinput look at joy2key http://interreality.org/~tetron/technology/joy2key/
@@ -30,3 +29,4 @@ joymouse - translates joystick events to mouse events. http://sourceforge.net/pr
 Updates:
 
 5 April 08: added support for mapping what joystick button maps to internal program buttons
+25 April 08: Config file support is mostly done now, multiple modes can be defined.
