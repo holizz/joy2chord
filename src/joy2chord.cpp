@@ -57,10 +57,6 @@ const int MAX_BAD = 40000; // A workaround for handling device initilization inp
 const int MAX_MACROS = 16; // How many macros can be understood
 const int MAX_MODIFIERS = 8; // How many modifier codes can be used (ctrl, alt, meta, etc) these keys are held down untill a non modifier is held down
 
-int verbose = 0;
-int debug = 0;
-int calibration = 0;
-
 static int uinp_fd = -1;
 struct uinput_user_dev uinp;       // uInput device structure
 struct input_event event; // Input device structure
@@ -73,6 +69,7 @@ public:
 
 	// mapping variables
 	__u16 modes[MAX_MODES][MAX_CODES];
+	__u16 simple_modes[MAX_MODES][MAX_CODES];
 	__u16 modifier[MAX_MODIFIERS];
 	int total_modifiers;
 	int modifier_state[MAX_MODIFIERS];
@@ -85,14 +82,19 @@ public:
 	int send_code[MAX_BUTTONS];
 	int modecount[MAX_MODES];
 	int button_code;
+	int verbose;
+	int debug;
+	int calibration;
 	
 	// joystick variables
 	int device_number; 
-	int buttons; // how many buttons we define values for
-	int total_buttons;
-	int axes;
-	int total_axes;
-	int joy_values[MAX_CODES];
+	int total_chorded_buttons; // how many buttons are treated as a chorded keyboard
+	int total_simple_buttons; // how many buttons are treated as a normal key
+	int controller_buttons; // how many buttons the hardware controller provides
+	int axes; // how many axes we defined functions for
+	int total_axes; // how many analog axes the hardware controller provides
+	int chord_values[MAX_CODES];
+	int simple_values[MAX_CODES];
 	int joy_fd;
 	__u16 lastkey;
 	__u16 thiskey;
@@ -100,13 +102,13 @@ public:
 
 	int open_joystick();
 	int setup_uinput_device();
-	int read_config(map<string, __u16> & mymap);
+	int read_config(map<string, __u16> & chordmap);
 	void send_click_events();
 	void send_key_down(__u16 key_code);
 	void send_key_up(__u16 key_code);
 	void process_events(js_event js);
 	int valid_key(string newkey);
-	void main_loop(map<string, __u16> mymap);
+	void main_loop(map<string, __u16> chordmap);
 	void ioctl_wrapper(int uinp_fd, int UI_SETBIT, int i);
 	void macro_parser(string macro);
 };
@@ -115,8 +117,6 @@ int joy2chord::open_joystick()
 {
         char device[256];
 	char name[128];
-	//total_buttons = 0;
-	//total_axes = 0;
 
         sprintf(device, "/dev/input/js%i", device_number);
 
@@ -136,17 +136,17 @@ int joy2chord::open_joystick()
 	{
 		cerr << "Invalid Value from JSIOCGAXES" << endl;
 	}
-	if ( 0 > ioctl(joy_fd, JSIOCGBUTTONS, &total_buttons))
+	if ( 0 > ioctl(joy_fd, JSIOCGBUTTONS, &controller_buttons))
 	{
 		cerr << "Invalid Value from JSIOCGBUTTONS" << endl;
 	}
-	if (total_buttons > MAX_BUTTONS)
+	if (controller_buttons > MAX_BUTTONS)
 	{
-		cerr << "total_buttons is greater then " << MAX_BUTTONS << " This is likely an error, but if you need support for more buttons, recompile joy2chord with a higher value for MAX_BUTTONS" << endl;
+		cerr << "controller_buttons is greater then " << MAX_BUTTONS << " This is likely an error, but if you need support for more buttons, recompile joy2chord with a higher value for MAX_BUTTONS" << endl;
 	}
-        if (buttons > total_buttons)
+        if ((total_chorded_buttons + total_simple_buttons) > controller_buttons)
 	{
-		cerr << "More buttons (" << buttons << ") defined then controller supports (" << total_buttons << ")" << endl;
+		cerr << "More buttons (" << total_chorded_buttons << ") defined then controller supports (" << controller_buttons << ")" << endl;
 	}
 	if ( 0 > ioctl(joy_fd, JSIOCGNAME(128), name))
 	{
@@ -157,7 +157,7 @@ int joy2chord::open_joystick()
 
 	if (verbose)
 	{
-        	cout << "Using Joystick " << device_number << " ( " << device_name << ") through device " << device << " with " << total_axes << " axes and " << total_buttons <<" buttons." << endl;
+        	cout << "Using Joystick " << device_number << " ( " << device_name << ") through device " << device << " with " << total_axes << " axes and " << controller_buttons <<" chorded buttons." << endl;
 	}
 
         return 0;
@@ -229,9 +229,9 @@ int joy2chord::setup_uinput_device()
        	return 1;
 }
 
-int joy2chord::read_config(map<string,__u16>  & mymap)
+int joy2chord::read_config(map<string,__u16>  & chordmap)
 {
-/*	
+/*	// string manipulation example code
 		ostringstream lbuffer;
 		lbuffer << mode_loop;
 		string tmpname = lbuffer.str();
@@ -239,420 +239,420 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 		ConfigFile config(filename);
 */
 	// these values come from /usr/include/linux/input.h
-	mymap["KEY_RESERVED"] = 0;
-	mymap["KEY_ESC"] = 1;
-	mymap["KEY_1"] = 2;
-	mymap["KEY_2"] = 3;
-	mymap["KEY_3"] = 4;
-	mymap["KEY_4"] = 5;
-	mymap["KEY_5"] = 6;
-	mymap["KEY_6"] = 7;
-	mymap["KEY_7"] = 8;
-	mymap["KEY_8"] = 9;
-	mymap["KEY_9"] = 10;
-	mymap["KEY_0"] = 11;
-	mymap["KEY_MINUS"] = 12;
-	mymap["KEY_EQUAL"] = 13;
-	mymap["KEY_BACKSPACE"] = 14;
-	mymap["KEY_TAB"] = 15;
-	mymap["KEY_Q"] = 16;
-	mymap["KEY_W"] = 17;
-	mymap["KEY_E"] = 18;
-	mymap["KEY_R"] = 19;
-	mymap["KEY_T"] = 20;
-	mymap["KEY_Y"] = 21;
-	mymap["KEY_U"] = 22;
-	mymap["KEY_I"] = 23;
-	mymap["KEY_O"] = 24;
-	mymap["KEY_P"] = 25;
-	mymap["KEY_LEFTBRACE"] = 26;
-	mymap["KEY_RIGHTBRACE"] = 27;
-	mymap["KEY_ENTER"] = 28;
-	mymap["KEY_LEFTCTRL"] = 29;
-	mymap["KEY_A"] = 30;
-	mymap["KEY_S"] = 31;
-	mymap["KEY_D"] = 32;
-	mymap["KEY_F"] = 33;
-	mymap["KEY_G"] = 34;
-	mymap["KEY_H"] = 35;
-	mymap["KEY_J"] = 36;
-	mymap["KEY_K"] = 37;
-	mymap["KEY_L"] = 38;
-	mymap["KEY_SEMICOLON"] = 39;
-	mymap["KEY_APOSTROPHE"] = 40;
-	mymap["KEY_GRAVE"] = 41;
-	mymap["KEY_LEFTSHIFT"] = 42;
-	mymap["KEY_BACKSLASH"] = 43;
-	mymap["KEY_Z"] = 44;
-	mymap["KEY_X"] = 45;
-	mymap["KEY_C"] = 46;
-	mymap["KEY_V"] = 47;
-	mymap["KEY_B"] = 48;
-	mymap["KEY_N"] = 49;
-	mymap["KEY_M"] = 50;
-	mymap["KEY_COMMA"] = 51;
-	mymap["KEY_DOT"] = 52;
-	mymap["KEY_SLASH"] = 53;
-	mymap["KEY_RIGHTSHIFT"] = 54;
-	mymap["KEY_KPASTERISK"] = 55;
-	mymap["KEY_LEFTALT"] = 56;
-	mymap["KEY_SPACE"] = 57;
-	mymap["KEY_CAPSLOCK"] = 58;
-	mymap["KEY_F1"] = 59;
-	mymap["KEY_F2"] = 60;
-	mymap["KEY_F3"] = 61;
-	mymap["KEY_F4"] = 62;
-	mymap["KEY_F5"] = 63;
-	mymap["KEY_F6"] = 64;
-	mymap["KEY_F7"] = 65;
-	mymap["KEY_F8"] = 66;
-	mymap["KEY_F9"] = 67;
-	mymap["KEY_F10"] = 68;
-	mymap["KEY_NUMLOCK"] = 69;
-	mymap["KEY_SCROLLLOCK"] = 70;
-	mymap["KEY_KP7"] = 71;
-	mymap["KEY_KP8"] = 72;
-	mymap["KEY_KP9"] = 73;
-	mymap["KEY_KPMINUS"] = 74;
-	mymap["KEY_KP4"] = 75;
-	mymap["KEY_KP5"] = 76;
-	mymap["KEY_KP6"] = 77;
-	mymap["KEY_KPPLUS"] = 78;
-	mymap["KEY_KP1"] = 79;
-	mymap["KEY_KP2"] = 80;
-	mymap["KEY_KP3"] = 81;
-	mymap["KEY_KP0"] = 82;
-	mymap["KEY_KPDOT"] = 83;
-	mymap["KEY_ZENKAKUHANKAKU"] = 85;
-	mymap["KEY_102ND"] = 86;
-	mymap["KEY_F11"] = 87;
-	mymap["KEY_F12"] = 88;
-	mymap["KEY_RO"] = 89;
-	mymap["KEY_KATAKANA"] = 90;
-	mymap["KEY_HIRAGANA"] = 91;
-	mymap["KEY_HENKAN"] = 92;
-	mymap["KEY_KATAKANAHIRAGANA"] = 93;
-	mymap["KEY_MUHENKAN"] = 94;
-	mymap["KEY_KPJPCOMMA"] = 95;
-	mymap["KEY_KPENTER"] = 96;
-	mymap["KEY_RIGHTCTRL"] = 97;
-	mymap["KEY_KPSLASH"] = 98;
-	mymap["KEY_SYSRQ"] = 99;
-	mymap["KEY_RIGHTALT"] = 100;
-	mymap["KEY_LINEFEED"] = 101;
-	mymap["KEY_HOME"] = 102;
-	mymap["KEY_UP"] = 103;
-	mymap["KEY_PAGEUP"] = 104;
-	mymap["KEY_LEFT"] = 105;
-	mymap["KEY_RIGHT"] = 106;
-	mymap["KEY_END"] = 107;
-	mymap["KEY_DOWN"] = 108;
-	mymap["KEY_PAGEDOWN"] = 109;
-	mymap["KEY_INSERT"] = 110;
-	mymap["KEY_DELETE"] = 111;
-	mymap["KEY_MACRO"] = 112;
-	mymap["KEY_MUTE"] = 113;
-	mymap["KEY_VOLUMEDOWN"] = 114;
-	mymap["KEY_VOLUMEUP"] = 115;
-	mymap["KEY_POWER"] = 116;
-	mymap["KEY_KPEQUAL"] = 117;
-	mymap["KEY_KPPLUSMINUS"] = 118;
-	mymap["KEY_PAUSE"] = 119;
-	mymap["KEY_KPCOMMA"] = 121;
-	mymap["KEY_HANGEUL"] = 122;
-	mymap["KEY_HANGUEL"] = KEY_HANGEUL;
-	mymap["KEY_HANJA"] = 123;
-	mymap["KEY_YEN"] = 124;
-	mymap["KEY_LEFTMETA"] = 125;
-	mymap["KEY_RIGHTMETA"] = 126;
-	mymap["KEY_COMPOSE"] = 127;
-	mymap["KEY_STOP"] = 128;
-	mymap["KEY_AGAIN"] = 129;
-	mymap["KEY_PROPS"] = 130;
-	mymap["KEY_UNDO"] = 131;
-	mymap["KEY_FRONT"] = 132;
-	mymap["KEY_COPY"] = 133;
-	mymap["KEY_OPEN"] = 134;
-	mymap["KEY_PASTE"] = 135;
-	mymap["KEY_FIND"] = 136;
-	mymap["KEY_CUT"] = 137;
-	mymap["KEY_HELP"] = 138;
-	mymap["KEY_MENU"] = 139;
-	mymap["KEY_CALC"] = 140;
-	mymap["KEY_SETUP"] = 141;
-	mymap["KEY_SLEEP"] = 142;
-	mymap["KEY_WAKEUP"] = 143;
-	mymap["KEY_FILE"] = 144;
-	mymap["KEY_SENDFILE"] = 145;
-	mymap["KEY_DELETEFILE"] = 146;
-	mymap["KEY_XFER"] = 147;
-	mymap["KEY_PROG1"] = 148;
-	mymap["KEY_PROG2"] = 149;
-	mymap["KEY_WWW"] = 150;
-	mymap["KEY_MSDOS"] = 151;
-	mymap["KEY_COFFEE"] = 152;
-	mymap["KEY_SCREENLOCK"] = KEY_COFFEE;
-	mymap["KEY_DIRECTION"] = 153;
-	mymap["KEY_CYCLEWINDOWS"] = 154;
-	mymap["KEY_MAIL"] = 155;
-	mymap["KEY_BOOKMARKS"] = 156;
-	mymap["KEY_COMPUTER"] = 157;
-	mymap["KEY_BACK"] = 158;
-	mymap["KEY_FORWARD"] = 159;
-	mymap["KEY_CLOSECD"] = 160;
-	mymap["KEY_EJECTCD"] = 161;
-	mymap["KEY_EJECTCLOSECD"] = 162;
-	mymap["KEY_NEXTSONG"] = 163;
-	mymap["KEY_PLAYPAUSE"] = 164;
-	mymap["KEY_PREVIOUSSONG"] = 165;
-	mymap["KEY_STOPCD"] = 166;
-	mymap["KEY_RECORD"] = 167;
-	mymap["KEY_REWIND"] = 168;
-	mymap["KEY_PHONE"] = 169;
-	mymap["KEY_ISO"] = 170;
-	mymap["KEY_CONFIG"] = 171;
-	mymap["KEY_HOMEPAGE"] = 172;
-	mymap["KEY_REFRESH"] = 173;
-	mymap["KEY_EXIT"] = 174;
-	mymap["KEY_MOVE"] = 175;
-	mymap["KEY_EDIT"] = 176;
-	mymap["KEY_SCROLLUP"] = 177;
-	mymap["KEY_SCROLLDOWN"] = 178;
-	mymap["KEY_KPLEFTPAREN"] = 179;
-	mymap["KEY_KPRIGHTPAREN"] = 180;
-	mymap["KEY_NEW"] = 181;
-	mymap["KEY_REDO"] = 182;
-	mymap["KEY_F13"] = 183;
-	mymap["KEY_F14"] = 184;
-	mymap["KEY_F15"] = 185;
-	mymap["KEY_F16"] = 186;
-	mymap["KEY_F17"] = 187;
-	mymap["KEY_F18"] = 188;
-	mymap["KEY_F19"] = 189;
-	mymap["KEY_F20"] = 190;
-	mymap["KEY_F21"] = 191;
-	mymap["KEY_F22"] = 192;
-	mymap["KEY_F23"] = 193;
-	mymap["KEY_F24"] = 194;
-	mymap["KEY_PLAYCD"] = 200;
-	mymap["KEY_PAUSECD"] = 201;
-	mymap["KEY_PROG3"] = 202;
-	mymap["KEY_PROG4"] = 203;
-	mymap["KEY_SUSPEND"] = 205;
-	mymap["KEY_CLOSE"] = 206;
-	mymap["KEY_PLAY"] = 207;
-	mymap["KEY_FASTFORWARD"] = 208;
-	mymap["KEY_BASSBOOST"] = 209;
-	mymap["KEY_PRINT"] = 210;
-	mymap["KEY_HP"] = 211;
-	mymap["KEY_CAMERA"] = 212;
-	mymap["KEY_SOUND"] = 213;
-	mymap["KEY_QUESTION"] = 214;
-	mymap["KEY_EMAIL"] = 215;
-	mymap["KEY_CHAT"] = 216;
-	mymap["KEY_SEARCH"] = 217;
-	mymap["KEY_CONNECT"] = 218;
-	mymap["KEY_FINANCE"] = 219;
-	mymap["KEY_SPORT"] = 220;
-	mymap["KEY_SHOP"] = 221;
-	mymap["KEY_ALTERASE"] = 222;
-	mymap["KEY_CANCEL"] = 223;
-	mymap["KEY_BRIGHTNESSDOWN"] = 224;
-	mymap["KEY_BRIGHTNESSUP"] = 225;
-	mymap["KEY_MEDIA"] = 226;
-	mymap["KEY_SWITCHVIDEOMODE"] = 227;
-	mymap["KEY_KBDILLUMTOGGLE"] = 228;
-	mymap["KEY_KBDILLUMDOWN"] = 229;
-	mymap["KEY_KBDILLUMUP"] = 230;
-	mymap["KEY_SEND"] = 231;
-	mymap["KEY_REPLY"] = 232;
-	mymap["KEY_FORWARDMAIL"] = 233;
-	mymap["KEY_SAVE"] = 234;
-	mymap["KEY_DOCUMENTS"] = 235;
-	mymap["KEY_BATTERY"] = 236;
-	mymap["KEY_BLUETOOTH"] = 237;
-	mymap["KEY_WLAN"] = 238;
-	mymap["KEY_UNKNOWN"] = 240;
-	mymap["KEY_VIDEO_NEXT"] = 241;
-	mymap["KEY_VIDEO_PREV"] = 242;
-	mymap["KEY_BRIGHTNESS_CYCLE"] = 243;
-	mymap["KEY_BRIGHTNESS_ZERO"] = 244;
-	mymap["KEY_DISPLAY_OFF"] = 245;
-	mymap["KEY_OK"] = 0x160;
-	mymap["KEY_SELECT"] = 0x161;
-	mymap["KEY_GOTO"] = 0x162;
-	mymap["KEY_CLEAR"] = 0x163;
-	mymap["KEY_POWER2"] = 0x164;
-	mymap["KEY_OPTION"] = 0x165;
-	mymap["KEY_INFO"] = 0x166;
-	mymap["KEY_TIME"] = 0x167;
-	mymap["KEY_VENDOR"] = 0x168;
-	mymap["KEY_ARCHIVE"] = 0x169;
-	mymap["KEY_PROGRAM"] = 0x16a;
-	mymap["KEY_CHANNEL"] = 0x16b;
-	mymap["KEY_FAVORITES"] = 0x16c;
-	mymap["KEY_EPG"] = 0x16d;
-	mymap["KEY_PVR"] = 0x16e;
-	mymap["KEY_MHP"] = 0x16f;
-	mymap["KEY_LANGUAGE"] = 0x170;
-	mymap["KEY_TITLE"] = 0x171;
-	mymap["KEY_SUBTITLE"] = 0x172;
-	mymap["KEY_ANGLE"] = 0x173;
-	mymap["KEY_ZOOM"] = 0x174;
-	mymap["KEY_MODE"] = 0x175;
-	mymap["KEY_KEYBOARD"] = 0x176;
-	mymap["KEY_SCREEN"] = 0x177;
-	mymap["KEY_PC"] = 0x178;
-	mymap["KEY_TV"] = 0x179;
-	mymap["KEY_TV2"] = 0x17a;
-	mymap["KEY_VCR"] = 0x17b;
-	mymap["KEY_VCR2"] = 0x17c;
-	mymap["KEY_SAT"] = 0x17d;
-	mymap["KEY_SAT2"] = 0x17e;
-	mymap["KEY_CD"] = 0x17f;
-	mymap["KEY_TAPE"] = 0x180;
-	mymap["KEY_RADIO"] = 0x181;
-	mymap["KEY_TUNER"] = 0x182;
-	mymap["KEY_PLAYER"] = 0x183;
-	mymap["KEY_TEXT"] = 0x184;
-	mymap["KEY_DVD"] = 0x185;
-	mymap["KEY_AUX"] = 0x186;
-	mymap["KEY_MP3"] = 0x187;
-	mymap["KEY_AUDIO"] = 0x188;
-	mymap["KEY_VIDEO"] = 0x189;
-	mymap["KEY_DIRECTORY"] = 0x18a;
-	mymap["KEY_LIST"] = 0x18b;
-	mymap["KEY_MEMO"] = 0x18c;
-	mymap["KEY_CALENDAR"] = 0x18d;
-	mymap["KEY_RED"] = 0x18e;
-	mymap["KEY_GREEN"] = 0x18f;
-	mymap["KEY_YELLOW"] = 0x190;
-	mymap["KEY_BLUE"] = 0x191;
-	mymap["KEY_CHANNELUP"] = 0x192;
-	mymap["KEY_CHANNELDOWN"] = 0x193;
-	mymap["KEY_FIRST"] = 0x194;
-	mymap["KEY_LAST"] = 0x195;
-	mymap["KEY_AB"] = 0x196;
-	mymap["KEY_NEXT"] = 0x197;
-	mymap["KEY_RESTART"] = 0x198;
-	mymap["KEY_SLOW"] = 0x199;
-	mymap["KEY_SHUFFLE"] = 0x19a;
-	mymap["KEY_BREAK"] = 0x19b;
-	mymap["KEY_PREVIOUS"] = 0x19c;
-	mymap["KEY_DIGITS"] = 0x19d;
-	mymap["KEY_TEEN"] = 0x19e;
-	mymap["KEY_TWEN"] = 0x19f;
-	mymap["KEY_VIDEOPHONE"] = 0x1a0;
-	mymap["KEY_GAMES"] = 0x1a1;
-	mymap["KEY_ZOOMIN"] = 0x1a2;
-	mymap["KEY_ZOOMOUT"] = 0x1a3;
-	mymap["KEY_ZOOMRESET"] = 0x1a4;
-	mymap["KEY_WORDPROCESSOR"] = 0x1a5;
-	mymap["KEY_EDITOR"] = 0x1a6;
-	mymap["KEY_SPREADSHEET"] = 0x1a7;
-	mymap["KEY_GRAPHICSEDITOR"] = 0x1a8;
-	mymap["KEY_PRESENTATION"] = 0x1a9;
-	mymap["KEY_DATABASE"] = 0x1aa;
-	mymap["KEY_NEWS"] = 0x1ab;
-	mymap["KEY_VOICEMAIL"] = 0x1ac;
-	mymap["KEY_ADDRESSBOOK"] = 0x1ad;
-	mymap["KEY_MESSENGER"] = 0x1ae;
-	mymap["KEY_DISPLAYTOGGLE"] = 0x1af;
-	mymap["KEY_DEL_EOL"] = 0x1c0;
-	mymap["KEY_DEL_EOS"] = 0x1c1;
-	mymap["KEY_INS_LINE"] = 0x1c2;
-	mymap["KEY_DEL_LINE"] = 0x1c3;
-	mymap["KEY_FN"] = 0x1d0;
-	mymap["KEY_FN_ESC"] = 0x1d1;
-	mymap["KEY_FN_F1"] = 0x1d2;
-	mymap["KEY_FN_F2"] = 0x1d3;
-	mymap["KEY_FN_F3"] = 0x1d4;
-	mymap["KEY_FN_F4"] = 0x1d5;
-	mymap["KEY_FN_F5"] = 0x1d6;
-	mymap["KEY_FN_F6"] = 0x1d7;
-	mymap["KEY_FN_F7"] = 0x1d8;
-	mymap["KEY_FN_F8"] = 0x1d9;
-	mymap["KEY_FN_F9"] = 0x1da;
-	mymap["KEY_FN_F10"] = 0x1db;
-	mymap["KEY_FN_F11"] = 0x1dc;
-	mymap["KEY_FN_F12"] = 0x1dd;
-	mymap["KEY_FN_1"] = 0x1de;
-	mymap["KEY_FN_2"] = 0x1df;
-	mymap["KEY_FN_D"] = 0x1e0;
-	mymap["KEY_FN_E"] = 0x1e1;
-	mymap["KEY_FN_F"] = 0x1e2;
-	mymap["KEY_FN_S"] = 0x1e3;
-	mymap["KEY_FN_B"] = 0x1e4;
-	mymap["KEY_BRL_DOT1"] = 0x1f1;
-	mymap["KEY_BRL_DOT2"] = 0x1f2;
-	mymap["KEY_BRL_DOT3"] = 0x1f3;
-	mymap["KEY_BRL_DOT4"] = 0x1f4;
-	mymap["KEY_BRL_DOT5"] = 0x1f5;
-	mymap["KEY_BRL_DOT6"] = 0x1f6;
-	mymap["KEY_BRL_DOT7"] = 0x1f7;
-	mymap["KEY_BRL_DOT8"] = 0x1f8;
-	mymap["KEY_BRL_DOT9"] = 0x1f9;
-	mymap["KEY_BRL_DOT10"] = 0x1fa;
-	mymap["KEY_MIN_INTERESTING"] = KEY_MUTE;
-	mymap["KEY_MAX"] = 0x1ff;
-	mymap["BTN_MISC"] = 0x100;
-	mymap["BTN_0"] = 0x100;
-	mymap["BTN_1"] = 0x101;
-	mymap["BTN_2"] = 0x102;
-	mymap["BTN_3"] = 0x103;
-	mymap["BTN_4"] = 0x104;
-	mymap["BTN_5"] = 0x105;
-	mymap["BTN_6"] = 0x106;
-	mymap["BTN_7"] = 0x107;
-	mymap["BTN_8"] = 0x108;
-	mymap["BTN_9"] = 0x109;
-	mymap["BTN_JOYSTICK"] = 0x120;
-	mymap["BTN_TRIGGER"] = 0x120;
-	mymap["BTN_THUMB"] = 0x121;
-	mymap["BTN_THUMB2"] = 0x122;
-	mymap["BTN_TOP"] = 0x123;
-	mymap["BTN_TOP2"] = 0x124;
-	mymap["BTN_PINKIE"] = 0x125;
-	mymap["BTN_BASE"] = 0x126;
-	mymap["BTN_BASE2"] = 0x127;
-	mymap["BTN_BASE3"] = 0x128;
-	mymap["BTN_BASE4"] = 0x129;
-	mymap["BTN_BASE5"] = 0x12a;
-	mymap["BTN_BASE6"] = 0x12b;
-	mymap["BTN_DEAD"] = 0x12f;
-	mymap["BTN_GAMEPAD"] = 0x130;
-	mymap["BTN_A"] = 0x130;
-	mymap["BTN_B"] = 0x131;
-	mymap["BTN_C"] = 0x132;
-	mymap["BTN_X"] = 0x133;
-	mymap["BTN_Y"] = 0x134;
-	mymap["BTN_Z"] = 0x135;
-	mymap["BTN_TL"] = 0x136;
-	mymap["BTN_TR"] = 0x137;
-	mymap["BTN_TL2"] = 0x138;
-	mymap["BTN_TR2"] = 0x139;
-	mymap["BTN_SELECT"] = 0x13a;
-	mymap["BTN_START"] = 0x13b;
-	mymap["BTN_MODE"] = 0x13c;
-	mymap["BTN_THUMBL"] = 0x13d;
-	mymap["BTN_THUMBR"] = 0x13e;
-	mymap["BTN_DIGI"] = 0x140;
-	mymap["BTN_TOOL_PEN"] = 0x140;
-	mymap["BTN_TOOL_RUBBER"] = 0x141;
-	mymap["BTN_TOOL_BRUSH"] = 0x142;
-	mymap["BTN_TOOL_PENCIL"] = 0x143;
-	mymap["BTN_TOOL_AIRBRUSH"] = 0x144;
-	mymap["BTN_TOOL_FINGER"] = 0x145;
-	mymap["BTN_TOOL_MOUSE"] = 0x146;
-	mymap["BTN_TOOL_LENS"] = 0x147;
-	mymap["BTN_TOUCH"] = 0x14a;
-	mymap["BTN_STYLUS"] = 0x14b;
-	mymap["BTN_STYLUS2"] = 0x14c;
-	mymap["BTN_TOOL_DOUBLETAP"] = 0x14d;
-	mymap["BTN_TOOL_TRIPLETAP"] = 0x14e;
-	mymap["BTN_WHEEL"] = 0x150;
-	mymap["BTN_GEAR_DOWN"] = 0x150;
-	mymap["BTN_GEAR_UP"] = 0x151;
+	chordmap["KEY_RESERVED"] = 0;
+	chordmap["KEY_ESC"] = 1;
+	chordmap["KEY_1"] = 2;
+	chordmap["KEY_2"] = 3;
+	chordmap["KEY_3"] = 4;
+	chordmap["KEY_4"] = 5;
+	chordmap["KEY_5"] = 6;
+	chordmap["KEY_6"] = 7;
+	chordmap["KEY_7"] = 8;
+	chordmap["KEY_8"] = 9;
+	chordmap["KEY_9"] = 10;
+	chordmap["KEY_0"] = 11;
+	chordmap["KEY_MINUS"] = 12;
+	chordmap["KEY_EQUAL"] = 13;
+	chordmap["KEY_BACKSPACE"] = 14;
+	chordmap["KEY_TAB"] = 15;
+	chordmap["KEY_Q"] = 16;
+	chordmap["KEY_W"] = 17;
+	chordmap["KEY_E"] = 18;
+	chordmap["KEY_R"] = 19;
+	chordmap["KEY_T"] = 20;
+	chordmap["KEY_Y"] = 21;
+	chordmap["KEY_U"] = 22;
+	chordmap["KEY_I"] = 23;
+	chordmap["KEY_O"] = 24;
+	chordmap["KEY_P"] = 25;
+	chordmap["KEY_LEFTBRACE"] = 26;
+	chordmap["KEY_RIGHTBRACE"] = 27;
+	chordmap["KEY_ENTER"] = 28;
+	chordmap["KEY_LEFTCTRL"] = 29;
+	chordmap["KEY_A"] = 30;
+	chordmap["KEY_S"] = 31;
+	chordmap["KEY_D"] = 32;
+	chordmap["KEY_F"] = 33;
+	chordmap["KEY_G"] = 34;
+	chordmap["KEY_H"] = 35;
+	chordmap["KEY_J"] = 36;
+	chordmap["KEY_K"] = 37;
+	chordmap["KEY_L"] = 38;
+	chordmap["KEY_SEMICOLON"] = 39;
+	chordmap["KEY_APOSTROPHE"] = 40;
+	chordmap["KEY_GRAVE"] = 41;
+	chordmap["KEY_LEFTSHIFT"] = 42;
+	chordmap["KEY_BACKSLASH"] = 43;
+	chordmap["KEY_Z"] = 44;
+	chordmap["KEY_X"] = 45;
+	chordmap["KEY_C"] = 46;
+	chordmap["KEY_V"] = 47;
+	chordmap["KEY_B"] = 48;
+	chordmap["KEY_N"] = 49;
+	chordmap["KEY_M"] = 50;
+	chordmap["KEY_COMMA"] = 51;
+	chordmap["KEY_DOT"] = 52;
+	chordmap["KEY_SLASH"] = 53;
+	chordmap["KEY_RIGHTSHIFT"] = 54;
+	chordmap["KEY_KPASTERISK"] = 55;
+	chordmap["KEY_LEFTALT"] = 56;
+	chordmap["KEY_SPACE"] = 57;
+	chordmap["KEY_CAPSLOCK"] = 58;
+	chordmap["KEY_F1"] = 59;
+	chordmap["KEY_F2"] = 60;
+	chordmap["KEY_F3"] = 61;
+	chordmap["KEY_F4"] = 62;
+	chordmap["KEY_F5"] = 63;
+	chordmap["KEY_F6"] = 64;
+	chordmap["KEY_F7"] = 65;
+	chordmap["KEY_F8"] = 66;
+	chordmap["KEY_F9"] = 67;
+	chordmap["KEY_F10"] = 68;
+	chordmap["KEY_NUMLOCK"] = 69;
+	chordmap["KEY_SCROLLLOCK"] = 70;
+	chordmap["KEY_KP7"] = 71;
+	chordmap["KEY_KP8"] = 72;
+	chordmap["KEY_KP9"] = 73;
+	chordmap["KEY_KPMINUS"] = 74;
+	chordmap["KEY_KP4"] = 75;
+	chordmap["KEY_KP5"] = 76;
+	chordmap["KEY_KP6"] = 77;
+	chordmap["KEY_KPPLUS"] = 78;
+	chordmap["KEY_KP1"] = 79;
+	chordmap["KEY_KP2"] = 80;
+	chordmap["KEY_KP3"] = 81;
+	chordmap["KEY_KP0"] = 82;
+	chordmap["KEY_KPDOT"] = 83;
+	chordmap["KEY_ZENKAKUHANKAKU"] = 85;
+	chordmap["KEY_102ND"] = 86;
+	chordmap["KEY_F11"] = 87;
+	chordmap["KEY_F12"] = 88;
+	chordmap["KEY_RO"] = 89;
+	chordmap["KEY_KATAKANA"] = 90;
+	chordmap["KEY_HIRAGANA"] = 91;
+	chordmap["KEY_HENKAN"] = 92;
+	chordmap["KEY_KATAKANAHIRAGANA"] = 93;
+	chordmap["KEY_MUHENKAN"] = 94;
+	chordmap["KEY_KPJPCOMMA"] = 95;
+	chordmap["KEY_KPENTER"] = 96;
+	chordmap["KEY_RIGHTCTRL"] = 97;
+	chordmap["KEY_KPSLASH"] = 98;
+	chordmap["KEY_SYSRQ"] = 99;
+	chordmap["KEY_RIGHTALT"] = 100;
+	chordmap["KEY_LINEFEED"] = 101;
+	chordmap["KEY_HOME"] = 102;
+	chordmap["KEY_UP"] = 103;
+	chordmap["KEY_PAGEUP"] = 104;
+	chordmap["KEY_LEFT"] = 105;
+	chordmap["KEY_RIGHT"] = 106;
+	chordmap["KEY_END"] = 107;
+	chordmap["KEY_DOWN"] = 108;
+	chordmap["KEY_PAGEDOWN"] = 109;
+	chordmap["KEY_INSERT"] = 110;
+	chordmap["KEY_DELETE"] = 111;
+	chordmap["KEY_MACRO"] = 112;
+	chordmap["KEY_MUTE"] = 113;
+	chordmap["KEY_VOLUMEDOWN"] = 114;
+	chordmap["KEY_VOLUMEUP"] = 115;
+	chordmap["KEY_POWER"] = 116;
+	chordmap["KEY_KPEQUAL"] = 117;
+	chordmap["KEY_KPPLUSMINUS"] = 118;
+	chordmap["KEY_PAUSE"] = 119;
+	chordmap["KEY_KPCOMMA"] = 121;
+	chordmap["KEY_HANGEUL"] = 122;
+	chordmap["KEY_HANGUEL"] = KEY_HANGEUL;
+	chordmap["KEY_HANJA"] = 123;
+	chordmap["KEY_YEN"] = 124;
+	chordmap["KEY_LEFTMETA"] = 125;
+	chordmap["KEY_RIGHTMETA"] = 126;
+	chordmap["KEY_COMPOSE"] = 127;
+	chordmap["KEY_STOP"] = 128;
+	chordmap["KEY_AGAIN"] = 129;
+	chordmap["KEY_PROPS"] = 130;
+	chordmap["KEY_UNDO"] = 131;
+	chordmap["KEY_FRONT"] = 132;
+	chordmap["KEY_COPY"] = 133;
+	chordmap["KEY_OPEN"] = 134;
+	chordmap["KEY_PASTE"] = 135;
+	chordmap["KEY_FIND"] = 136;
+	chordmap["KEY_CUT"] = 137;
+	chordmap["KEY_HELP"] = 138;
+	chordmap["KEY_MENU"] = 139;
+	chordmap["KEY_CALC"] = 140;
+	chordmap["KEY_SETUP"] = 141;
+	chordmap["KEY_SLEEP"] = 142;
+	chordmap["KEY_WAKEUP"] = 143;
+	chordmap["KEY_FILE"] = 144;
+	chordmap["KEY_SENDFILE"] = 145;
+	chordmap["KEY_DELETEFILE"] = 146;
+	chordmap["KEY_XFER"] = 147;
+	chordmap["KEY_PROG1"] = 148;
+	chordmap["KEY_PROG2"] = 149;
+	chordmap["KEY_WWW"] = 150;
+	chordmap["KEY_MSDOS"] = 151;
+	chordmap["KEY_COFFEE"] = 152;
+	chordmap["KEY_SCREENLOCK"] = KEY_COFFEE;
+	chordmap["KEY_DIRECTION"] = 153;
+	chordmap["KEY_CYCLEWINDOWS"] = 154;
+	chordmap["KEY_MAIL"] = 155;
+	chordmap["KEY_BOOKMARKS"] = 156;
+	chordmap["KEY_COMPUTER"] = 157;
+	chordmap["KEY_BACK"] = 158;
+	chordmap["KEY_FORWARD"] = 159;
+	chordmap["KEY_CLOSECD"] = 160;
+	chordmap["KEY_EJECTCD"] = 161;
+	chordmap["KEY_EJECTCLOSECD"] = 162;
+	chordmap["KEY_NEXTSONG"] = 163;
+	chordmap["KEY_PLAYPAUSE"] = 164;
+	chordmap["KEY_PREVIOUSSONG"] = 165;
+	chordmap["KEY_STOPCD"] = 166;
+	chordmap["KEY_RECORD"] = 167;
+	chordmap["KEY_REWIND"] = 168;
+	chordmap["KEY_PHONE"] = 169;
+	chordmap["KEY_ISO"] = 170;
+	chordmap["KEY_CONFIG"] = 171;
+	chordmap["KEY_HOMEPAGE"] = 172;
+	chordmap["KEY_REFRESH"] = 173;
+	chordmap["KEY_EXIT"] = 174;
+	chordmap["KEY_MOVE"] = 175;
+	chordmap["KEY_EDIT"] = 176;
+	chordmap["KEY_SCROLLUP"] = 177;
+	chordmap["KEY_SCROLLDOWN"] = 178;
+	chordmap["KEY_KPLEFTPAREN"] = 179;
+	chordmap["KEY_KPRIGHTPAREN"] = 180;
+	chordmap["KEY_NEW"] = 181;
+	chordmap["KEY_REDO"] = 182;
+	chordmap["KEY_F13"] = 183;
+	chordmap["KEY_F14"] = 184;
+	chordmap["KEY_F15"] = 185;
+	chordmap["KEY_F16"] = 186;
+	chordmap["KEY_F17"] = 187;
+	chordmap["KEY_F18"] = 188;
+	chordmap["KEY_F19"] = 189;
+	chordmap["KEY_F20"] = 190;
+	chordmap["KEY_F21"] = 191;
+	chordmap["KEY_F22"] = 192;
+	chordmap["KEY_F23"] = 193;
+	chordmap["KEY_F24"] = 194;
+	chordmap["KEY_PLAYCD"] = 200;
+	chordmap["KEY_PAUSECD"] = 201;
+	chordmap["KEY_PROG3"] = 202;
+	chordmap["KEY_PROG4"] = 203;
+	chordmap["KEY_SUSPEND"] = 205;
+	chordmap["KEY_CLOSE"] = 206;
+	chordmap["KEY_PLAY"] = 207;
+	chordmap["KEY_FASTFORWARD"] = 208;
+	chordmap["KEY_BASSBOOST"] = 209;
+	chordmap["KEY_PRINT"] = 210;
+	chordmap["KEY_HP"] = 211;
+	chordmap["KEY_CAMERA"] = 212;
+	chordmap["KEY_SOUND"] = 213;
+	chordmap["KEY_QUESTION"] = 214;
+	chordmap["KEY_EMAIL"] = 215;
+	chordmap["KEY_CHAT"] = 216;
+	chordmap["KEY_SEARCH"] = 217;
+	chordmap["KEY_CONNECT"] = 218;
+	chordmap["KEY_FINANCE"] = 219;
+	chordmap["KEY_SPORT"] = 220;
+	chordmap["KEY_SHOP"] = 221;
+	chordmap["KEY_ALTERASE"] = 222;
+	chordmap["KEY_CANCEL"] = 223;
+	chordmap["KEY_BRIGHTNESSDOWN"] = 224;
+	chordmap["KEY_BRIGHTNESSUP"] = 225;
+	chordmap["KEY_MEDIA"] = 226;
+	chordmap["KEY_SWITCHVIDEOMODE"] = 227;
+	chordmap["KEY_KBDILLUMTOGGLE"] = 228;
+	chordmap["KEY_KBDILLUMDOWN"] = 229;
+	chordmap["KEY_KBDILLUMUP"] = 230;
+	chordmap["KEY_SEND"] = 231;
+	chordmap["KEY_REPLY"] = 232;
+	chordmap["KEY_FORWARDMAIL"] = 233;
+	chordmap["KEY_SAVE"] = 234;
+	chordmap["KEY_DOCUMENTS"] = 235;
+	chordmap["KEY_BATTERY"] = 236;
+	chordmap["KEY_BLUETOOTH"] = 237;
+	chordmap["KEY_WLAN"] = 238;
+	chordmap["KEY_UNKNOWN"] = 240;
+	chordmap["KEY_VIDEO_NEXT"] = 241;
+	chordmap["KEY_VIDEO_PREV"] = 242;
+	chordmap["KEY_BRIGHTNESS_CYCLE"] = 243;
+	chordmap["KEY_BRIGHTNESS_ZERO"] = 244;
+	chordmap["KEY_DISPLAY_OFF"] = 245;
+	chordmap["KEY_OK"] = 0x160;
+	chordmap["KEY_SELECT"] = 0x161;
+	chordmap["KEY_GOTO"] = 0x162;
+	chordmap["KEY_CLEAR"] = 0x163;
+	chordmap["KEY_POWER2"] = 0x164;
+	chordmap["KEY_OPTION"] = 0x165;
+	chordmap["KEY_INFO"] = 0x166;
+	chordmap["KEY_TIME"] = 0x167;
+	chordmap["KEY_VENDOR"] = 0x168;
+	chordmap["KEY_ARCHIVE"] = 0x169;
+	chordmap["KEY_PROGRAM"] = 0x16a;
+	chordmap["KEY_CHANNEL"] = 0x16b;
+	chordmap["KEY_FAVORITES"] = 0x16c;
+	chordmap["KEY_EPG"] = 0x16d;
+	chordmap["KEY_PVR"] = 0x16e;
+	chordmap["KEY_MHP"] = 0x16f;
+	chordmap["KEY_LANGUAGE"] = 0x170;
+	chordmap["KEY_TITLE"] = 0x171;
+	chordmap["KEY_SUBTITLE"] = 0x172;
+	chordmap["KEY_ANGLE"] = 0x173;
+	chordmap["KEY_ZOOM"] = 0x174;
+	chordmap["KEY_MODE"] = 0x175;
+	chordmap["KEY_KEYBOARD"] = 0x176;
+	chordmap["KEY_SCREEN"] = 0x177;
+	chordmap["KEY_PC"] = 0x178;
+	chordmap["KEY_TV"] = 0x179;
+	chordmap["KEY_TV2"] = 0x17a;
+	chordmap["KEY_VCR"] = 0x17b;
+	chordmap["KEY_VCR2"] = 0x17c;
+	chordmap["KEY_SAT"] = 0x17d;
+	chordmap["KEY_SAT2"] = 0x17e;
+	chordmap["KEY_CD"] = 0x17f;
+	chordmap["KEY_TAPE"] = 0x180;
+	chordmap["KEY_RADIO"] = 0x181;
+	chordmap["KEY_TUNER"] = 0x182;
+	chordmap["KEY_PLAYER"] = 0x183;
+	chordmap["KEY_TEXT"] = 0x184;
+	chordmap["KEY_DVD"] = 0x185;
+	chordmap["KEY_AUX"] = 0x186;
+	chordmap["KEY_MP3"] = 0x187;
+	chordmap["KEY_AUDIO"] = 0x188;
+	chordmap["KEY_VIDEO"] = 0x189;
+	chordmap["KEY_DIRECTORY"] = 0x18a;
+	chordmap["KEY_LIST"] = 0x18b;
+	chordmap["KEY_MEMO"] = 0x18c;
+	chordmap["KEY_CALENDAR"] = 0x18d;
+	chordmap["KEY_RED"] = 0x18e;
+	chordmap["KEY_GREEN"] = 0x18f;
+	chordmap["KEY_YELLOW"] = 0x190;
+	chordmap["KEY_BLUE"] = 0x191;
+	chordmap["KEY_CHANNELUP"] = 0x192;
+	chordmap["KEY_CHANNELDOWN"] = 0x193;
+	chordmap["KEY_FIRST"] = 0x194;
+	chordmap["KEY_LAST"] = 0x195;
+	chordmap["KEY_AB"] = 0x196;
+	chordmap["KEY_NEXT"] = 0x197;
+	chordmap["KEY_RESTART"] = 0x198;
+	chordmap["KEY_SLOW"] = 0x199;
+	chordmap["KEY_SHUFFLE"] = 0x19a;
+	chordmap["KEY_BREAK"] = 0x19b;
+	chordmap["KEY_PREVIOUS"] = 0x19c;
+	chordmap["KEY_DIGITS"] = 0x19d;
+	chordmap["KEY_TEEN"] = 0x19e;
+	chordmap["KEY_TWEN"] = 0x19f;
+	chordmap["KEY_VIDEOPHONE"] = 0x1a0;
+	chordmap["KEY_GAMES"] = 0x1a1;
+	chordmap["KEY_ZOOMIN"] = 0x1a2;
+	chordmap["KEY_ZOOMOUT"] = 0x1a3;
+	chordmap["KEY_ZOOMRESET"] = 0x1a4;
+	chordmap["KEY_WORDPROCESSOR"] = 0x1a5;
+	chordmap["KEY_EDITOR"] = 0x1a6;
+	chordmap["KEY_SPREADSHEET"] = 0x1a7;
+	chordmap["KEY_GRAPHICSEDITOR"] = 0x1a8;
+	chordmap["KEY_PRESENTATION"] = 0x1a9;
+	chordmap["KEY_DATABASE"] = 0x1aa;
+	chordmap["KEY_NEWS"] = 0x1ab;
+	chordmap["KEY_VOICEMAIL"] = 0x1ac;
+	chordmap["KEY_ADDRESSBOOK"] = 0x1ad;
+	chordmap["KEY_MESSENGER"] = 0x1ae;
+	chordmap["KEY_DISPLAYTOGGLE"] = 0x1af;
+	chordmap["KEY_DEL_EOL"] = 0x1c0;
+	chordmap["KEY_DEL_EOS"] = 0x1c1;
+	chordmap["KEY_INS_LINE"] = 0x1c2;
+	chordmap["KEY_DEL_LINE"] = 0x1c3;
+	chordmap["KEY_FN"] = 0x1d0;
+	chordmap["KEY_FN_ESC"] = 0x1d1;
+	chordmap["KEY_FN_F1"] = 0x1d2;
+	chordmap["KEY_FN_F2"] = 0x1d3;
+	chordmap["KEY_FN_F3"] = 0x1d4;
+	chordmap["KEY_FN_F4"] = 0x1d5;
+	chordmap["KEY_FN_F5"] = 0x1d6;
+	chordmap["KEY_FN_F6"] = 0x1d7;
+	chordmap["KEY_FN_F7"] = 0x1d8;
+	chordmap["KEY_FN_F8"] = 0x1d9;
+	chordmap["KEY_FN_F9"] = 0x1da;
+	chordmap["KEY_FN_F10"] = 0x1db;
+	chordmap["KEY_FN_F11"] = 0x1dc;
+	chordmap["KEY_FN_F12"] = 0x1dd;
+	chordmap["KEY_FN_1"] = 0x1de;
+	chordmap["KEY_FN_2"] = 0x1df;
+	chordmap["KEY_FN_D"] = 0x1e0;
+	chordmap["KEY_FN_E"] = 0x1e1;
+	chordmap["KEY_FN_F"] = 0x1e2;
+	chordmap["KEY_FN_S"] = 0x1e3;
+	chordmap["KEY_FN_B"] = 0x1e4;
+	chordmap["KEY_BRL_DOT1"] = 0x1f1;
+	chordmap["KEY_BRL_DOT2"] = 0x1f2;
+	chordmap["KEY_BRL_DOT3"] = 0x1f3;
+	chordmap["KEY_BRL_DOT4"] = 0x1f4;
+	chordmap["KEY_BRL_DOT5"] = 0x1f5;
+	chordmap["KEY_BRL_DOT6"] = 0x1f6;
+	chordmap["KEY_BRL_DOT7"] = 0x1f7;
+	chordmap["KEY_BRL_DOT8"] = 0x1f8;
+	chordmap["KEY_BRL_DOT9"] = 0x1f9;
+	chordmap["KEY_BRL_DOT10"] = 0x1fa;
+	chordmap["KEY_MIN_INTERESTING"] = KEY_MUTE;
+	chordmap["KEY_MAX"] = 0x1ff;
+	chordmap["BTN_MISC"] = 0x100;
+	chordmap["BTN_0"] = 0x100;
+	chordmap["BTN_1"] = 0x101;
+	chordmap["BTN_2"] = 0x102;
+	chordmap["BTN_3"] = 0x103;
+	chordmap["BTN_4"] = 0x104;
+	chordmap["BTN_5"] = 0x105;
+	chordmap["BTN_6"] = 0x106;
+	chordmap["BTN_7"] = 0x107;
+	chordmap["BTN_8"] = 0x108;
+	chordmap["BTN_9"] = 0x109;
+	chordmap["BTN_JOYSTICK"] = 0x120;
+	chordmap["BTN_TRIGGER"] = 0x120;
+	chordmap["BTN_THUMB"] = 0x121;
+	chordmap["BTN_THUMB2"] = 0x122;
+	chordmap["BTN_TOP"] = 0x123;
+	chordmap["BTN_TOP2"] = 0x124;
+	chordmap["BTN_PINKIE"] = 0x125;
+	chordmap["BTN_BASE"] = 0x126;
+	chordmap["BTN_BASE2"] = 0x127;
+	chordmap["BTN_BASE3"] = 0x128;
+	chordmap["BTN_BASE4"] = 0x129;
+	chordmap["BTN_BASE5"] = 0x12a;
+	chordmap["BTN_BASE6"] = 0x12b;
+	chordmap["BTN_DEAD"] = 0x12f;
+	chordmap["BTN_GAMEPAD"] = 0x130;
+	chordmap["BTN_A"] = 0x130;
+	chordmap["BTN_B"] = 0x131;
+	chordmap["BTN_C"] = 0x132;
+	chordmap["BTN_X"] = 0x133;
+	chordmap["BTN_Y"] = 0x134;
+	chordmap["BTN_Z"] = 0x135;
+	chordmap["BTN_TL"] = 0x136;
+	chordmap["BTN_TR"] = 0x137;
+	chordmap["BTN_TL2"] = 0x138;
+	chordmap["BTN_TR2"] = 0x139;
+	chordmap["BTN_SELECT"] = 0x13a;
+	chordmap["BTN_START"] = 0x13b;
+	chordmap["BTN_MODE"] = 0x13c;
+	chordmap["BTN_THUMBL"] = 0x13d;
+	chordmap["BTN_THUMBR"] = 0x13e;
+	chordmap["BTN_DIGI"] = 0x140;
+	chordmap["BTN_TOOL_PEN"] = 0x140;
+	chordmap["BTN_TOOL_RUBBER"] = 0x141;
+	chordmap["BTN_TOOL_BRUSH"] = 0x142;
+	chordmap["BTN_TOOL_PENCIL"] = 0x143;
+	chordmap["BTN_TOOL_AIRBRUSH"] = 0x144;
+	chordmap["BTN_TOOL_FINGER"] = 0x145;
+	chordmap["BTN_TOOL_MOUSE"] = 0x146;
+	chordmap["BTN_TOOL_LENS"] = 0x147;
+	chordmap["BTN_TOUCH"] = 0x14a;
+	chordmap["BTN_STYLUS"] = 0x14b;
+	chordmap["BTN_STYLUS2"] = 0x14c;
+	chordmap["BTN_TOOL_DOUBLETAP"] = 0x14d;
+	chordmap["BTN_TOOL_TRIPLETAP"] = 0x14e;
+	chordmap["BTN_WHEEL"] = 0x150;
+	chordmap["BTN_GEAR_DOWN"] = 0x150;
+	chordmap["BTN_GEAR_UP"] = 0x151;
 
 	ConfigFile config (config_file);
 	
@@ -660,30 +660,84 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 	{
 		cerr << "Invalid entry for jsdev" << endl;
 	}
-	if (!(config.readInto(buttons, "total_buttons"))) // we don't care about how many buttons the controller provides, only about how many we have values defined for
-	{
-		cerr << "Invalid entry for total_buttons" << endl;
-	}else{
-		if (verbose)
-		{
-			cout << buttons << " buttons defined by the config file" << endl; 
-		}
-			}
-	ostringstream buttonbuffer;
-	string button_name;
-	for (int load_codes=0; load_codes < buttons; load_codes++)
-	{
-		buttonbuffer.str("");
-		buttonbuffer << load_codes;
-		button_name = "joy_b" + buttonbuffer.str();
-		if (!(config.readInto(joy_values[load_codes], button_name)))
-		{
-			cerr << "Invalid code entered for " << button_name << " of: " << joy_values[load_codes] << endl;
-		}
-	}
+	
 	if (!(config.readInto(total_modes, "total_modes")))
 	{
 		cerr << "Invalid code for total_modes" << endl;
+	}
+	
+	if (verbose)
+	{
+		cout << "Using " << config_file << " for configuration information" << endl;
+	}
+	
+		if (!(config.readInto(total_simple_buttons, "total_simple_buttons"))) // we don't care about how many buttons the controller provides, only about how many we have values defined for
+	{
+		cerr << "Invalid entry for total_simple_buttons" << endl;
+	}else{
+		if (verbose)
+		{
+			cout << total_simple_buttons << " simple buttons defined by the config file" << endl; 
+		}
+	}
+
+	for (int mode_loop = 1; mode_loop <= total_simple_buttons; mode_loop++)
+	{	
+		ostringstream lbuffer;
+		lbuffer << mode_loop;
+		string button_name = "simple_b" + lbuffer.str();
+		if (!(config.readInto(simple_values[mode_loop], button_name)))
+		{
+			cerr << "Invalid code entered for " << button_name << " of: " << simple_values[mode_loop] << endl;
+		}else{
+			if (debug)
+			{
+				if (1 == mode_loop)
+				{
+					cout << "Simple Button Values: B" << lbuffer.str() << ": " << simple_values[mode_loop];
+				}else{
+					cout << " B" << lbuffer.str() << ": " << simple_values[mode_loop];
+				}
+				if (mode_loop == total_simple_buttons)
+				{
+					cout << endl;
+				}
+			}
+		}
+	}
+
+	for (int mode_loop = 1; mode_loop <= total_modes; mode_loop++)
+	{	
+		//lbuffer.str() = "";
+		ostringstream lbuffer;
+		lbuffer << mode_loop;
+		if (debug)
+		{
+			cout << "Mode " << lbuffer.str() << endl;
+		}
+		for (int key_loop = 1; key_loop <= total_simple_buttons; key_loop++)
+		{// position 0 isn't used on key loop
+			ostringstream tbuffer;
+			tbuffer << key_loop;
+			string itemname = lbuffer.str() + "simple" + tbuffer.str();
+			string readvalue = "";
+			if (!(config.readInto(readvalue,itemname)))
+			{
+				cerr << "Invalid entry for value: " << itemname << endl;
+			}
+			__u16 ukeyvalue = chordmap.find(readvalue)->second;
+			simple_modes[mode_loop][key_loop] = ukeyvalue;
+			//SOMETHING [mode_loop][key_loop] = readvalue;
+			if ((debug) && (readvalue != ""))
+			{ // only read valid entries
+				cout << "Adding " << readvalue << "[" << ukeyvalue << "]" << " to simple[" << mode_loop << "][" << key_loop << "] " << endl;
+			}
+		}
+	}
+
+	if (debug)
+	{
+		cout << "Done Loading simple config values" << endl;	
 	}
 	if (!(config.readInto(total_macros, "total_macros")))
 	{
@@ -703,19 +757,52 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 			{
 				cerr << " Invalid code for " << current_modifier_code << endl;
 			}else{
-				__u16 ukeyvalue = mymap.find(tmpstring)->second;
+				__u16 ukeyvalue = chordmap.find(tmpstring)->second;
 				modifier[loadmacro] = ukeyvalue;
 			}
 		}
 	}
-	if (verbose)
+	
+	if (!(config.readInto(total_chorded_buttons, "total_chorded_buttons"))) // we don't care about how many buttons the controller provides, only about how many we have values defined for
 	{
-		cout << "Using " << config_file << " for configuration information" << endl;
-		cout << "Device: " << device_number << " Joy_values: " << joy_values[0] << " " << joy_values[1] << " " <<  joy_values[2] << " " << joy_values[3] << " " <<  joy_values[4] << " " <<  joy_values[5] << endl;
+		cerr << "Invalid entry for total_chorded_buttons" << endl;
+	}else{
+		if (verbose)
+		{
+			cout << total_chorded_buttons << " chorded buttons defined by the config file" << endl; 
+		}
 	}
+
+	string button_name;
+	ostringstream buttonbuffer;
+	for (int load_codes = 1; load_codes <= total_chorded_buttons; load_codes++)
+	{
+		button_name.empty();
+		buttonbuffer.str("");
+		buttonbuffer << load_codes;
+		button_name = "chord_b" + buttonbuffer.str();
+		if (!(config.readInto(chord_values[load_codes - 1], button_name)))
+		{
+			cerr << "Invalid code entered for " << button_name << " of: " << chord_values[load_codes] << endl;
+		}
+		if (debug)
+			{
+				if (1 == load_codes)
+				{
+					cout << "Chord Button Values: B" << buttonbuffer.str() << ": " << chord_values[load_codes];
+				}else{
+					cout << " B" << buttonbuffer.str() << ": " << chord_values[load_codes];
+				}
+				if (load_codes == total_chorded_buttons)
+				{
+					cout << endl;
+				}
+			}
+		}
+	
 	if (debug)
 	{
-		cout << "Starting to load standard config values from 0 to " << pow(2,buttons) << endl;
+		cout << "Starting to load chorded config values from 0 to " << pow(2,total_chorded_buttons) << "(2^" << total_chorded_buttons << ")" << endl;
 	}
 	for (int mode_loop = 1; mode_loop <= total_modes; mode_loop++)
 	{	
@@ -730,30 +817,27 @@ int joy2chord::read_config(map<string,__u16>  & mymap)
 		{
 			cout << "Adding Mode " << mode_code[mode_loop] << " into " << current_mode_code << endl;
 		}
-		for (int key_loop = 1; key_loop < (pow(2,buttons)); key_loop++)
+		for (int key_loop = 1; key_loop < (pow(2,total_chorded_buttons)); key_loop++)
 		{// position 0 isn't used on key loop
 			ostringstream tbuffer;
 			tbuffer << key_loop;
-			string itemname = lbuffer.str() + "key" + tbuffer.str();
+			string itemname = lbuffer.str() + "chord" + tbuffer.str();
 			string readvalue = "";
 			if (!(config.readInto(readvalue,itemname)))
 			{
 				cerr << "Invalid entry for value: " << itemname << endl;
 			}
-			__u16 ukeyvalue = mymap.find(readvalue)->second;
-			if ((debug) && (readvalue != "" ))
-			{ // only read valid entries
-			}
+			__u16 ukeyvalue = chordmap.find(readvalue)->second;
 			modes[mode_loop][key_loop] = ukeyvalue;
 			if ((debug) && (readvalue != ""))
 			{ // only read valid entries
-				cout << "Adding " << readvalue << "[" << ukeyvalue << "]" << " to mode[" << mode_loop << "][" << key_loop << "] " << endl;
+				cout << "Adding " << readvalue << "[" << ukeyvalue << "]" << " to chorded[" << mode_loop << "][" << key_loop << "] " << endl;
 			}
 		}
 	}
 	if (debug)
 	{
-		cout << "Done Loading standard config values" << endl;	
+		cout << "Done Loading chorded config values" << endl;	
 	}
 }
 
@@ -855,7 +939,7 @@ int joy2chord::valid_key( string newkey){
 	return -1;
 }
 
-void joy2chord::main_loop(map<string,__u16> mymap)
+void joy2chord::main_loop(map<string,__u16> chordmap)
 {
 	struct js_event js;
 	
@@ -886,6 +970,7 @@ void joy2chord::main_loop(map<string,__u16> mymap)
 		process_events(js);
 	}//while
 }
+
 void joy2chord::process_events(js_event js)
 {
 	switch(js.type & ~JS_EVENT_INIT) 
@@ -893,37 +978,52 @@ void joy2chord::process_events(js_event js)
                	case JS_EVENT_BUTTON:
 			if (js.value) 
 			{ // if a button is pressed down remember its state until all buttons are released
-				for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
+				for ( int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
 				{
-					if( js.number == joy_values[allbuttons])
-					{
-						if (calibration)
+					if (calibration)
 						{
 							printf("Pressed: %i\n",js.number);
 						}
-						/*if (debug)
-						{
-							printf("Pressed: %i\n",js.number);
-						}*/
+					if( js.number == chord_values[allbuttons])
+					{
+						
 						button_state[allbuttons] = 1;
 						send_code[allbuttons] = 1;
 					}
+				}		
+				for (int allsimple = 1; allsimple <= total_simple_buttons; allsimple++)
+				{
+					if (simple_values[allsimple] == js.number)
+					{
+						if (verbose)
+						{
+							//cout << "Sending Down: " << // simple_values[allsimple];
+						}
+						send_key_down(simple_modes[mode][allsimple]);	
+					}
 				}
 			}else{ // track when buttons are released
-				for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
+				for ( int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
 				{
 		
 					{
 						button_state[allbuttons] = 0;
-						/*if (debug)
-						{	
-							printf("Released: %i\n",js.number);
-						}*/
+					}
+				}
+				for (int allsimple = 1; allsimple <= total_simple_buttons; allsimple++)
+				{
+					if (simple_values[allsimple] == js.number)
+					{
+						if (verbose)
+						{
+							//cout << "Sending Up: " << //simple_values[allsimple];
+						}
+						send_key_up(simple_modes[mode][allsimple]);	
 					}
 				}
 			}
 			// sanity checker, to make sure no bad data get through
-			for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+			for (int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
 			{
 				if (send_code[allbuttons] > MAX_BAD)
 				{
@@ -934,15 +1034,15 @@ void joy2chord::process_events(js_event js)
 			
 			if (debug)
 			{
-				cout << "Button State: ";
-				for (int allbuttons = 0; allbuttons < buttons; allbuttons++){
+				cout << "Button State: Chord: ";
+				for (int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++){
 					cout << allbuttons << ":" << send_code[allbuttons] << " ";
 				}
 				cout << endl;
 			}
                         // this is the "key code" that is going to be sent
 			button_code = 0;
-			for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+			for (int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
 			{
 				if (allbuttons == 0 )
 				{
@@ -950,37 +1050,25 @@ void joy2chord::process_events(js_event js)
 				}
 				else
 				{
-						button_code += (send_code[allbuttons] * pow(2,allbuttons));
+					button_code += (send_code[allbuttons] * pow(2,allbuttons));
 				}
 			}
 			thiskey = modes[mode][button_code];	
-			/*if (debug)
-			{
-				cout << "button code: " << button_code << endl;
-			}*/
 			int clear = 0;
 			if (0 == button_code)
 			{
-				/*if (debug)
-				{
-					cout << "No code to send" << endl;
-				}*/
 				clear++;
 			}
-			for ( int allbuttons = 0; allbuttons < buttons; allbuttons++)
+			for ( int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
 			{
 				if (button_state[allbuttons] != 0)
 				{
-					/*if (debug)
-					{
-						cout << "Not clear, button defined in config file as " << allbuttons << " is set" << endl;
-					}*/
 					clear++;
 				}
 			}
 			if (clear == 0)
 			{ // if all buttons are released then send the code and clear everything
-				for (int allbuttons = 0; allbuttons < buttons; allbuttons++)
+				for (int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
 				{
 					send_code[allbuttons] = 0;
 				}
@@ -1020,7 +1108,10 @@ void joy2chord::process_events(js_event js)
 				{
 					if( mode_code[mode_loop] == button_code)
 					{
-						cout << "Mode changed to " << mode_loop << endl;
+						if (verbose)
+						{
+							cout << "Mode changed to " << mode_loop << endl;
+						}
 						mode = mode_loop;
 					}
 				}
@@ -1091,7 +1182,7 @@ void joy2chord::process_events(js_event js)
 				}	
 
 				int clearl;
-				for (clearl=0; clearl < buttons; clearl++){
+				for (clearl=0; clearl < total_chorded_buttons; clearl++){
 					send_code[clearl] = 0;
 				}
 			}
@@ -1106,6 +1197,9 @@ int main( int argc, char *argv[])
 	
 	int init_device_number = 0;
 	string init_config_file = "joy2chord-config";
+	int setverbose = 0;
+	int setdebug = 0;
+	int setcalibration = 0;
 	
 	while ((c = getopt(argc, argv, "hvdbc:j:")) != -1){
 		switch (c){
@@ -1120,17 +1214,17 @@ int main( int argc, char *argv[])
 				break;
 			case 'd':
 				cout << "debug messages enabled" << endl;
-				debug = 1; 
+				setdebug = 1; 
 				break;
 			case 'v':
 				cout << "verbose messages enabled" << endl;
-				verbose = 1; 
+				setverbose = 1; 
 				break;
 			case 'c':
 				init_config_file = optarg; 
 				break;			
 			case 'b':
-				calibration = 1;
+				setcalibration = 1;
 				break;
 			case 'j':
 				init_device_number = atoi (optarg);
@@ -1139,7 +1233,7 @@ int main( int argc, char *argv[])
 		}
 	}
 
-	map<string,__u16> mymap;
+	map<string,__u16> chordmap;
 	
 	joy2chord myjoy;
 
@@ -1147,19 +1241,23 @@ int main( int argc, char *argv[])
 	myjoy.total_modes = 0;
 	myjoy.config_file = init_config_file;
 	myjoy.axes = 0;
-	myjoy.buttons = 0;
+	myjoy.total_simple_buttons = 0;
+	myjoy.total_chorded_buttons = 0;
 	myjoy.mode = 1;
+	myjoy.calibration = setcalibration;
+	myjoy.debug = setdebug;
+	myjoy.verbose = setverbose;
 	for (int allmodifier = 0; allmodifier < MAX_MODIFIERS; allmodifier++)
 	{
 		myjoy.modifier[allmodifier] = 0;
 	}
         
 	myjoy.setup_uinput_device();
-	myjoy.read_config(mymap);
+	myjoy.read_config(chordmap);
 	myjoy.device_number = init_device_number; // once the device number is pulled from the config file, store it with the other information in the class
 	myjoy.open_joystick();
 
-	myjoy.main_loop(mymap);
+	myjoy.main_loop(chordmap);
 	//send_click_events();           // Send mouse event
         /* Destroy the input device */
 	int destroy = ioctl(uinp_fd, UI_DEV_DESTROY);
