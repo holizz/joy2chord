@@ -978,12 +978,13 @@ void joy2chord::process_events(js_event js)
                	case JS_EVENT_BUTTON:
 			if (js.value) 
 			{ // if a button is pressed down remember its state until all buttons are released
-				for ( int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
+				if (calibration)
 				{
-					if (calibration)
-						{
-							printf("Pressed: %i\n",js.number);
-						}
+					printf("Pressed: %i\n",js.number);
+				}
+			for ( int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
+				{
+					
 					if( js.number == chord_values[allbuttons])
 					{
 						
