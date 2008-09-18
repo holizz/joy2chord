@@ -1,5 +1,7 @@
 Joy2Chord is a userlevel input driver for chorded keyboards based off of devices that can interface through /dev/input/js*.
 
+This version has been modified to be the joystick input driver for Nghost2
+
 Written by Nathanael Anderson wirelessdreamer (AT) gmail (DOT) com
 config file code by Rick Wagner wagnerr@umich.edu from http://www-personal.umich.edu/~wagnerr/ConfigFile.html
 
@@ -30,3 +32,4 @@ Updates:
 
 5 April 08: added support for mapping what joystick button maps to internal program buttons
 25 April 08: Config file support is mostly done now, multiple modes can be defined.
+4 May 08: Simple config file support completed, button repeat support should work for simple buttons

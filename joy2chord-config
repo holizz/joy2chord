@@ -1,0 +1,282 @@
+#   Why a 6 button controller as the default config?
+#
+#  Default Config File for joy2chord by Nathanael Anderson
+#  wir ele ssdr eamer A@T gmail D0T com
+#
+# 1. Thats what I built, so the config is made and tested
+# 2. One button for each finger, 2 for the thumb, fingers don't 
+#    have to move very far at all.
+# 3. 64 combinations per mode, I used 3 modes, define whatever you want 
+#    for each, I started with 5 buttons and 32 combinations, but I had 
+#    to change modes to often with this setup, so i added a 6th button
+#
+#   Why A Joystick as a Chorded Keyboard?
+# 
+# Gamepads and joysticks are dirt cheap, chorded keyboards ... usually aren't 
+# I wanted to play around with this for a while, so if its useful to you, 
+# enjoy, if not ignore it :)
+#
+#
+# Basic Config Options
+jsdev = 0 # if device hooked up to /dev/input/js0 set jsdev = 0
+
+total_simple_buttons = 0
+
+simple_b1 = 5
+simple_b2 = 7
+
+1simple1 = KEY_A
+1simple2 = KEY_B
+
+2simple1 = KEY_C
+2simple2 = KEY_D
+
+3simple1 = KEY_E
+3simple2 = KEY_F
+
+total_chorded_buttons = 6 # The hardware used may provide more buttons then we use, so only cycle through as many as we use
+
+# use joy_b0, and increment for every button you use, map buttons to the joystick code they send
+# these are assigned binary number combinations so 
+# b1 is worth 1 
+# b2 is worth 2 
+# b3 is worth 4
+# b4 is worth 8
+# b5 is worth 16
+# b6 is worth 32
+
+chord_b1 = 4
+chord_b2 = 6
+chord_b3 = 9
+chord_b4 = 3
+chord_b5 = 5
+chord_b6 = 7
+
+# How many modes do you want to define
+total_modes = 3
+
+total_macros = 4
+
+total_modifiers = 4
+
+1modifier = KEY_LEFTMETA
+2modifier = KEY_LEFTCTRL
+3modifier = KEY_LEFTALT
+4modifier = KEY_LEFTSHIFT
+
+# what key combinations toggle modes
+# Examples:
+# on a 6 button controller pressing buttons
+# 1modecode = 31
+# 1,2,3,4,5 = 1+2+4+8+16 = 31
+# 2modecode = 47
+# 1,2,3,4,6 = 1+2+4+8+32 = 47
+# 3modecode = 63
+# 1,2,3,4,5,6 = 1+2+4+8+16+32 = 63
+
+1modecode = 31 
+2modecode = 47
+3modecode = 63
+
+# all valid codes come from /usr/include/linux/input.h
+# Mode One options ( form of 1chord# )
+# the leading number 1 in this case signifies the mode
+# the trailing number is the binary number combination the chorded buttons equal
+# so for 1chord10 if you have 4 buttons, the 2nd and 4th would be pressed down
+# as 2 + 8 = 10
+
+1chord1 = KEY_A
+1chord2 = KEY_B
+1chord3 = KEY_C
+1chord4 = KEY_D
+1chord5 = KEY_E
+1chord6 = KEY_F
+1chord7 = KEY_G
+1chord8 = KEY_H
+1chord9 = KEY_I
+1chord10 = KEY_J
+1chord11 = KEY_K
+1chord12 = KEY_L
+1chord13 = KEY_M
+1chord14 = KEY_N
+1chord15 = KEY_O
+1chord16 = KEY_P
+1chord17 = KEY_Q
+1chord18 = KEY_R
+1chord19 = KEY_S
+1chord20 = KEY_T
+1chord21 = KEY_U
+1chord22 = KEY_V
+1chord23 = KEY_W
+1chord24 = KEY_X
+1chord25 = KEY_Y
+1chord26 = KEY_Z
+1chord27 = KEY_LEFTSHIFT
+1chord28 = KEY_LEFTMETA
+1chord29 = KEY_LEFTCTRL
+1chord30 = KEY_LEFTALT
+1chord31 = KEY_RESERVED # using for mode one
+1chord32 = KEY_ENTER
+1chord33 = KEY_SPACE
+1chord34 = KEY_TAB
+1chord35 = KEY_BACKSPACE
+1chord36 = KEY_RESERVED
+1chord37 = KEY_RESERVED
+1chord38 = KEY_RESERVED 
+1chord39 = KEY_RESERVED
+1chord40 = KEY_ESC
+1chord41 = KEY_PAGEUP
+1chord42 = KEY_PAGEDOWN
+1chord43 = KEY_HOME
+1chord44 = KEY_END
+1chord45 = KEY_INSERT
+1chord46 = KEY_DELETE
+1chord47 = KEY_RESERVED #using for mode two
+1chord48 = KEY_RESERVED
+1chord49 = KEY_RESERVED
+1chord50 = KEY_RESERVED
+1chord51 = KEY_RESERVED
+1chord52 = KEY_RESERVED
+1chord53 = KEY_RESERVED
+1chord54 = KEY_RESERVED
+1chord55 = KEY_RESERVED
+1chord56 = KEY_RESERVED
+1chord57 = KEY_RESERVED
+1chord58 = KEY_RESERVED
+1chord59 = KEY_RESERVED
+1chord60 = KEY_RESERVED
+1chord61 = KEY_RESERVED
+1chord62 = KEY_RESERVED
+1chord63 = KEY_RESERVED # using for mode two
+
+# Mode Two options ( form of 2chord# )
+
+2chord1 = KEY_1
+2chord2 = KEY_2
+2chord3 = KEY_3
+2chord4 = KEY_4
+2chord5 = KEY_5
+2chord6 = KEY_6
+2chord7 = KEY_7
+2chord8 = KEY_8
+2chord9 = KEY_9
+2chord10 = KEY_0
+2chord11 = KEY_RESERVED
+2chord12 = KEY_RESERVED
+2chord13 = KEY_RESERVED
+2chord14 = KEY_RESERVED
+2chord15 = KEY_RESERVED
+2chord16 = KEY_RESERVED
+2chord17 = KEY_RESERVED
+2chord18 = KEY_RESERVED
+2chord19 = KEY_RESERVED
+2chord20 = KEY_RESERVED
+2chord21 = KEY_LEFTBRACE
+2chord22 = KEY_RIGHTBRACE
+2chord23 = KEY_RESERVED
+2chord24 = KEY_RESERVED
+2chord25 = KEY_RESERVED
+2chord26 = KEY_RESERVED
+2chord27 = KEY_LEFTSHIFT	
+2chord28 = KEY_LEFTMETA
+2chord29 = KEY_LEFTCTRL
+2chord30 = KEY_LEFTALT
+2chord31 = KEY_RESERVED # using for mode one
+2chord32 = KEY_ENTER
+2chord33 = KEY_SPACE
+2chord34 = KEY_TAB
+2chord35 = KEY_BACKSPACE
+2chord36 = KEY_RESERVED
+2chord37 = KEY_RESERVED
+2chord38 = KEY_RESERVED
+2chord39 = KEY_RESERVED
+2chord40 = KEY_ESC
+2chord41 = KEY_RESERVED
+2chord42 = KEY_RESERVED
+2chord43 = KEY_HOME
+2chord44 = KEY_END
+2chord45 = KEY_INSERT
+2chord46 = KEY_DELETE
+2chord47 = KEY_RESERVED # using for mode two
+2chord48 = KEY_RESERVED
+2chord49 = KEY_RESERVED
+2chord50 = KEY_RESERVED
+2chord51 = KEY_RESERVED
+2chord52 = KEY_RESERVED
+2chord53 = KEY_RESERVED
+2chord54 = KEY_RESERVED
+2chord55 = KEY_RESERVED
+2chord56 = KEY_RESERVED
+2chord57 = KEY_RESERVED
+2chord58 = KEY_RESERVED
+2chord59 = KEY_RESERVED
+2chord60 = KEY_RESERVED
+2chord61 = KEY_RESERVED
+2chord62 = KEY_RESERVED
+2chord63 = KEY_RESERVED # using for mode two
+
+# Mode Three options ( form of 3chord# )
+
+3chord1 = KEY_UP
+3chord2 = KEY_LEFT
+3chord3 = KEY_PAGEUP
+3chord4 = KEY_RIGHT
+3chord5 = KEY_RESERVED
+3chord6 = KEY_RESERVED
+3chord7 = KEY_RESERVED
+3chord8 = KEY_DOWN
+3chord9 = KEY_RESERVED
+3chord10 = KEY_RESERVED
+3chord11 = KEY_RESERVED
+3chord12 = KEY_PAGEDOWN
+3chord13 = KEY_RESERVED
+3chord14 = KEY_RESERVED
+3chord15 = KEY_RESERVED
+3chord16 = KEY_RESERVED
+3chord17 = KEY_RESERVED
+3chord18 = KEY_RESERVED
+3chord19 = KEY_RESERVED
+3chord20 = KEY_RESERVED
+3chord21 = KEY_RESERVED
+3chord22 = KEY_RESERVED
+3chord23 = KEY_RESERVED
+3chord24 = KEY_RESERVED
+3chord25 = KEY_RESERVED
+3chord26 = KEY_RESERVED
+3chord27 = KEY_LEFTSHIFT
+3chord28 = KEY_LEFTMETA
+3chord29 = KEY_LEFTCTRL
+3chord30 = KEY_LEFTALT
+3chord31 = KEY_RESERVED # using for mode one
+3chord32 = KEY_ENTER
+3chord33 = KEY_F1
+3chord34 = KEY_F2
+3chord35 = KEY_F3
+3chord36 = KEY_F4
+3chord37 = KEY_F5
+3chord38 = KEY_F6
+3chord39 = KEY_F7
+3chord40 = KEY_F8
+3chord41 = KEY_F9
+3chord42 = KEY_F10
+3chord43 = KEY_F11
+3chord44 = KEY_F12
+3chord45 = KEY_RESERVED
+3chord46 = KEY_RESERVED
+3chord47 = KEY_RESERVED # using for mode two
+3chord48 = KEY_RESERVED
+3chord49 = KEY_RESERVED
+3chord50 = KEY_RESERVED
+3chord51 = KEY_RESERVED
+3chord52 = KEY_RESERVED
+3chord53 = KEY_RESERVED
+3chord54 = KEY_RESERVED
+3chord55 = KEY_RESERVED
+3chord56 = KEY_RESERVED
+3chord57 = KEY_SYSRQ
+3chord58 = KEY_BREAK
+3chord59 = KEY_PAUSE
+3chord60 = KEY_CAPSLOCK
+3chord61 = KEY_NUMLOCK
+3chord62 = KEY_SCROLLLOCK
+3chord63 = KEY_RESERVED # using for mode three
