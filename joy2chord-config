@@ -20,6 +20,8 @@
 # Basic Config Options
 jsdev = 0 # if device hooked up to /dev/input/js0 set jsdev = 0
 
+# to find out button numbers us the jstest utility
+
 total_simple_buttons = 0
 
 simple_b1 = 5
@@ -44,6 +46,8 @@ total_chorded_buttons = 6 # The hardware used may provide more buttons then we u
 # b4 is worth 8
 # b5 is worth 16
 # b6 is worth 32
+
+# to find out button numbers us the jstest utility
 
 chord_b1 = 4
 chord_b2 = 6
