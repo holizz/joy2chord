@@ -6,9 +6,9 @@
 # 1. Thats what I built, so the config is made and tested
 # 2. One button for each finger, 2 for the thumb, fingers don't 
 #    have to move very far at all.
-# 3. 64 combinations per mode, I used 3 modes, define whatever you want 
+# 3. 63 combinations per mode, I used 3 modes, define whatever you want 
 #    for each, I started with 5 buttons and 32 combinations, but I had 
-#    to change modes to often with this setup, so i added a 6th button
+#    to change modes too often with this setup, so i added a 6th button
 #
 #   Why A Joystick as a Chorded Keyboard?
 # 
@@ -20,9 +20,12 @@
 # Basic Config Options
 jsdev = 0 # if device hooked up to /dev/input/js0 set jsdev = 0
 
-# to find out button numbers us the jstest utility
+# to find out button numbers use the jstest utility
 
 total_simple_buttons = 0
+
+# use simple_b1, and increment for every button you use, map buttons to the joystick code they send
+
 
 simple_b1 = 5
 simple_b2 = 7
@@ -47,7 +50,7 @@ total_chorded_buttons = 6 # The hardware used may provide more buttons then we u
 # b5 is worth 16
 # b6 is worth 32
 
-# to find out button numbers us the jstest utility
+# to find out button numbers use the jstest utility
 
 chord_b1 = 4
 chord_b2 = 6
@@ -57,11 +60,11 @@ chord_b5 = 5
 chord_b6 = 7
 
 # How many modes do you want to define
-total_modes = 3
+total_modes = 3 # How many modes do you want to define
 
-total_macros = 4
+total_macros = 4 # macros are not implemented yet
 
-total_modifiers = 4
+total_modifiers = 4 # a modifier is activated until a non modifier is pressed
 
 1modifier = KEY_LEFTMETA
 2modifier = KEY_LEFTCTRL
@@ -88,6 +91,8 @@ total_modifiers = 4
 # the trailing number is the binary number combination the chorded buttons equal
 # so for 1chord10 if you have 4 buttons, the 2nd and 4th would be pressed down
 # as 2 + 8 = 10
+
+# unused keys should be set to KEY_RESERVED so warnings are not given about undefined values
 
 1chord1 = KEY_A
 1chord2 = KEY_B
