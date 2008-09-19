@@ -22,10 +22,11 @@ jsdev = 0 # if device hooked up to /dev/input/js0 set jsdev = 0
 
 # to find out button numbers use the jstest utility
 
-total_simple_buttons = 0
+total_simple_buttons = 0 # no simple buttons are defined in this config, so this is set to 0
 
 # use simple_b1, and increment for every button you use, map buttons to the joystick code they send
-
+# a simple button is not part of a chord, and is held down untill released
+# in 1simple2 1 stands for the current mode, and 2 for the 
 
 simple_b1 = 5
 simple_b2 = 7
@@ -39,7 +40,7 @@ simple_b2 = 7
 3simple1 = KEY_E
 3simple2 = KEY_F
 
-total_chorded_buttons = 6 # The hardware used may provide more buttons then we use, so only cycle through as many as we use
+total_chorded_buttons = 6 # The hardware used may provide more buttons than we use, so only cycle through as many as we use
 
 # use joy_b0, and increment for every button you use, map buttons to the joystick code they send
 # these are assigned binary number combinations so 
@@ -49,6 +50,8 @@ total_chorded_buttons = 6 # The hardware used may provide more buttons then we u
 # b4 is worth 8
 # b5 is worth 16
 # b6 is worth 32
+
+# so if b2 and b5 are pressed, the current value is 18, whenever a button is pressed, what it is worth is added to the total value of the chord, so if the chorded keyboard is in mode 1 and buttons 2 + 5 are pressed, the chord total is 18, if all buttons are released mode 1 value 18 is sent, which in the default config would map to the letter r.
 
 # to find out button numbers use the jstest utility
 
