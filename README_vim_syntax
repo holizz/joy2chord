@@ -1,0 +1,6 @@
+copy j2c.vim to ~/.vim/syntax/j2c.vim
+then, to use it, you can put the following in to your ~/.vim/filetype.vim
+
+augroup filetypedetect
+au BufNewFile,BufRead *.j2c setf j2c
+augroup END
