@@ -21,6 +21,7 @@
 // Uinput code based off example in January 2007 Dashboard Issue by Mehul Patel
 // http://www.einfochips.com/download/dash_jan_tip.pdf
 
+#include <stdlib.h>
 #include <string>
 #include <iostream>
 #include <stdio.h>
