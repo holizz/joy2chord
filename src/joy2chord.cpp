@@ -1106,9 +1106,10 @@ void joy2chord::process_events(js_event js)
 						}	*/
 					}
 				}				
+				int old_mode = mode;
 				for (int mode_loop = 0; mode_loop < MAX_MODES; mode_loop++)
 				{
-					if( mode_code[mode_loop] == button_code)
+					if(mode_code[mode_loop] == button_code && mode_loop != old_mode)
 					{
 						if (verbose)
 						{
