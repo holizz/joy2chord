@@ -983,7 +983,7 @@ void joy2chord::process_events(js_event js)
 				{
 					printf("Pressed: %i\n",js.number);
 				}
-			for ( int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
+				for ( int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
 				{
 					
 					if( js.number == chord_values[allbuttons])
