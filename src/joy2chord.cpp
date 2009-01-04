@@ -37,7 +37,6 @@
 #include <cstring>
 #include <string>
 #include <linux/joystick.h>
-#include <math.h>
 #include <sstream>
 #include <map>
 #include <errno.h>
@@ -803,7 +802,7 @@ int joy2chord::read_config(map<string,__u16>  & chordmap)
 	
 	if (debug)
 	{
-		cout << "Starting to load chorded config values from 0 to " << pow(2,total_chorded_buttons) << "(2^" << total_chorded_buttons << ")" << endl;
+		cout << "Starting to load chorded config values from 0 to " << (1<<total_chorded_buttons) << "(2^" << total_chorded_buttons << ")" << endl;
 	}
 	for (int mode_loop = 1; mode_loop <= total_modes; mode_loop++)
 	{	
@@ -818,7 +817,7 @@ int joy2chord::read_config(map<string,__u16>  & chordmap)
 		{
 			cout << "Adding Mode " << mode_code[mode_loop] << " into " << current_mode_code << endl;
 		}
-		for (int key_loop = 1; key_loop < (pow(2,total_chorded_buttons)); key_loop++)
+		for (int key_loop = 1; key_loop < (1<<total_chorded_buttons); key_loop++)
 		{// position 0 isn't used on key loop
 			ostringstream tbuffer;
 			tbuffer << key_loop;
@@ -1046,14 +1045,7 @@ void joy2chord::process_events(js_event js)
 			button_code = 0;
 			for (int allbuttons = 0; allbuttons < total_chorded_buttons; allbuttons++)
 			{
-				if (allbuttons == 0 )
-				{
-					button_code += send_code[allbuttons];
-				}
-				else
-				{
-					button_code += (send_code[allbuttons] * pow(2,allbuttons));
-				}
+				button_code += send_code[allbuttons] << allbuttons;
 			}
 			thiskey = modes[mode][button_code];	
 			int clear = 0;
